@@ -1,0 +1,19 @@
+# Build artifacts
+dist/
+build/
+*.exe
+*.pyc
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Logs
+build_log.txt
+*.log
+
+# GitNexus / AI agent internal
+.gitnexus/
+.ai-workspace/
+AI_PLANNER_MEMORY.md
