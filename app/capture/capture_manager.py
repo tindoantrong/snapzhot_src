@@ -13,7 +13,7 @@ from PySide6.QtGui import QImage
 
 
 def _grab_to_qimage(monitor: dict) -> QImage:
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         shot = sct.grab(monitor)
     # mss trả raw BGRA. QImage Format_ARGB32 trên little-endian đọc đúng thứ tự BGRA.
     img = QImage(
@@ -29,7 +29,7 @@ def _grab_to_qimage(monitor: dict) -> QImage:
 
 def virtual_screen_geometry() -> dict:
     """Trả về dict {left, top, width, height} của toàn bộ vùng ảo (monitor[0])."""
-    with mss.mss() as sct:
+    with mss.MSS() as sct:
         m = sct.monitors[0]
         return {"left": m["left"], "top": m["top"],
                 "width": m["width"], "height": m["height"]}

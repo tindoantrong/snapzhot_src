@@ -43,7 +43,6 @@ class VideoRecorder(QThread):
     def run(self) -> None:
         frame_interval = 1.0 / self._fps
         frame_count = 0
-        start = time.perf_counter()
         active_seconds = 0.0  # thời gian thực sự quay (không tính lúc pause)
 
         # H.264 yêu cầu kích thước chia hết cho 2; macro_block_size lo phần đệm.
@@ -60,8 +59,9 @@ class VideoRecorder(QThread):
             self.error.emit(f"Không mở được bộ ghi video: {exc}")
             return
 
+        errored = False
         try:
-            with mss.mss() as sct:
+            with mss.MSS() as sct:
                 next_t = time.perf_counter()
                 while self._running:
                     if self._paused:
@@ -84,9 +84,10 @@ class VideoRecorder(QThread):
                     else:
                         next_t = time.perf_counter()
         except Exception as exc:
+            errored = True
             self.error.emit(f"Lỗi khi quay: {exc}")
         finally:
             writer.close()
 
-        duration = time.perf_counter() - start
-        self.finished_recording.emit(self._output_path, duration, frame_count)
+        if not errored:
+            self.finished_recording.emit(self._output_path, active_seconds, frame_count)

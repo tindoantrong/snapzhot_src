@@ -146,9 +146,11 @@ class LibraryManager:
 
     def list_captures(self, search: str = "") -> list[Capture]:
         if search:
-            like = f"%{search}%"
+            escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like = f"%{escaped}%"
             rows = self._conn.execute(
-                "SELECT * FROM captures WHERE filename LIKE ? OR tags LIKE ? "
+                "SELECT * FROM captures WHERE filename LIKE ? ESCAPE '\\' "
+                "OR tags LIKE ? ESCAPE '\\' "
                 "ORDER BY datetime(created_at) DESC",
                 (like, like),
             ).fetchall()

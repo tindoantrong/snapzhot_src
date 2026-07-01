@@ -6,6 +6,38 @@ type: project
 
 # AI_QC_MEMORY — SnagTin
 
+## BUGR2-2/2-3 — window z-order + library search escape (2026-07-01) → PASS
+Không UI thấy được → verify HÀNH VI offscreen.
+- BUGR2-3 (library_manager.list_captures:147-161): escape `\`→`%`→`_` + `LIKE ? ESCAPE '\'`.
+  Harness DB tmp: patch `database_path/library_dir/thumbnails_dir` TẠI module library_manager
+  (không đụng DB thật). search '%'→chỉ record chứa %; '_'→chỉ record chứa _; '50%'→chỉ '50%off';
+  ''→tất cả; '\'→backslash literal. Coder test scripts/test_library_search.py đủ, PASS.
+- BUGR2-2 (window_selector.window_rect_at_point:34-69): GetTopWindow(0)+GetWindow(GW_HWNDNEXT)
+  topmost-first thay EnumWindows. Mock win32gui/win32con/_HAS_WIN32 TẠI module window_selector.
+  2 cửa sổ chồng→trả topmost; exclude/invisible/iconic/no-title/zero-size bị lọc; ngoài→None;
+  GetTopWindow throw→None; _HAS_WIN32=False→None; GetWindow throw giữa chừng→break→None.
+  Coder test scripts/test_window_zorder.py đủ, PASS.
+  [LOW robustness note] vòng `while hwnd` chỉ break khi GetWindow raise; nếu API trả hwnd LẶP
+  (cyclic) sẽ kẹt vô hạn (đã tái hiện bằng mock trái contract → timeout 124). KHÔNG phải bug
+  thực: Win32 GW_HWNDNEXT bảo đảm trả 0 ở cuối. Chỉ ghi chú, không blocking.
+Regression PASS 6/6: test_library_search, test_window_zorder, smoke_test, test_window_delayed,
+test_recent_delete, test_recent_strip.
+Live-only: Z-order với cửa sổ desktop THẬT (user eyes-test phiên thật).
+
+## BUGR2-1 — recorder.py fix (harness behavior, 2026-07-01) → PASS
+Không có UI thấy được (VideoRecorder = QThread) → verify HÀNH VI, không eyes-test.
+mss.grab CHẠY ĐƯỢC cả khi QT_QPA_PLATFORM=offscreen (có display thật). Harness controller:
+nối REAL VideoRecorder.finished_recording/error vào FakeController (đếm add_video + toast)
+mô phỏng đúng wiring app_controller.py:603-604.
+- CA1 dual-emit: monkeypatch mss.mss→_BrokenMSS (grab lần>1 raise). KẾT QUẢ: chỉ `error`
+  emit, `finished_recording` KHÔNG → add_video=0, 0 toast success, 1 toast lỗi.
+- CA2 pause duration: quay0.5s→pause1s→quay0.5s→stop. duration emit=1.000s (=frames/fps
+  active) vs wall≈2.03s → dùng active_seconds đúng, KHÔNG wall-clock.
+- CA3 bình thường: add_video=1, 1 toast success, file>0B (14KB).
+Regression PASS 5/5 offscreen: smoke_test, test_video, test_audio_recording,
+test_video_player, test_escape. Coder đã tự thêm CA1-3 vào scripts/test_video.py (đủ, PASS).
+Live-only: toast tray THẬT + video hỏng có bị thêm vào thư viện thật không (chỉ verify qua stub).
+
 ## REC2 — Xoá ảnh từ filmstrip Editor (eyes-test 2026-06-26, 6 ca) → PASS
 Harness `scripts/qc_recent_delete_capture.py`. Mô phỏng controller
 `delete_capture_requested → _on_delete_capture` (bỏ ảnh; xoá ảnh đang mở→nhảy recents[0]).

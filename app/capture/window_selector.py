@@ -38,44 +38,35 @@ def window_rect_at_point(x: int, y: int, exclude_hwnd: int = 0) -> QRect | None:
     Trả None nếu không có win32 hoặc không tìm thấy cửa sổ phù hợp.
 
     Vì overlay của app phủ lên trên cùng nên không thể dùng trực tiếp
-    WindowFromPoint (sẽ luôn ra overlay). Thay vào đó duyệt mọi cửa sổ
-    top-level theo Z-order (EnumWindows trả từ trên xuống dưới) và lấy cửa
-    sổ hợp lệ đầu tiên có khung chứa điểm.
+    WindowFromPoint (sẽ luôn ra overlay). Thay vào đó duyệt theo Z-order
+    ĐƯỢC ĐẢM BẢO bởi GetTopWindow(0) + GetWindow(GW_HWNDNEXT): trả về cửa
+    sổ hợp lệ ĐẦU TIÊN (topmost) có khung chứa điểm mà không gom toàn bộ list.
     """
     if not _HAS_WIN32:
         return None
 
-    matches: list[QRect] = []
-
-    def _cb(hwnd, _ctx) -> bool:
-        try:
-            if hwnd == exclude_hwnd:
-                return True
-            if not win32gui.IsWindowVisible(hwnd):
-                return True
-            if win32gui.IsIconic(hwnd):  # bị thu nhỏ
-                return True
-            # Bỏ cửa sổ công cụ ẩn / không tiêu đề (background system windows).
-            if not win32gui.GetWindowText(hwnd):
-                return True
-            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            w, h = right - left, bottom - top
-            if w <= 0 or h <= 0:
-                return True
-            rect = QRect(left, top, w, h)
-            if rect.contains(x, y):
-                matches.append(rect)
-        except Exception:
-            pass
-        return True
-
     try:
-        win32gui.EnumWindows(_cb, None)
+        hwnd = win32gui.GetTopWindow(0)  # 0 = desktop; cửa sổ trên cùng nhất
     except Exception:
         return None
 
-    # EnumWindows trả theo Z-order từ trên xuống -> phần tử đầu là trên cùng.
-    return matches[0] if matches else None
+    while hwnd:
+        try:
+            if hwnd != exclude_hwnd and win32gui.IsWindowVisible(hwnd) \
+                    and not win32gui.IsIconic(hwnd) \
+                    and win32gui.GetWindowText(hwnd):
+                left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+                w, h = right - left, bottom - top
+                if w > 0 and h > 0 and QRect(left, top, w, h).contains(x, y):
+                    return QRect(left, top, w, h)
+        except Exception:
+            pass  # cửa sổ không truy cập được → bỏ qua, tiếp tục
+        try:
+            hwnd = win32gui.GetWindow(hwnd, win32con.GW_HWNDNEXT)
+        except Exception:
+            break
+
+    return None
 
 
 class WindowSelector(QWidget):

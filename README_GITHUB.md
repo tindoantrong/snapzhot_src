@@ -29,7 +29,7 @@
 
 ## ⬇️ Tải về & cài đặt
 
-1. Vào mục **[Releases](https://github.com/doanleox/snapzhot/releases/latest)**
+1. Vào mục **[Releases](https://github.com/tindoantrong/snapzhot_src/releases/latest)**
 2. Tải file **`SnagTin-Setup-x.x.x.exe`**
 3. Chạy file và làm theo trình cài đặt
 

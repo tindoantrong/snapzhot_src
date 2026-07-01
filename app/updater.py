@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # Nguồn cập nhật: file latest.json đính kèm trong Release mới nhất của repo.
 # Link "releases/latest/download/<file>" luôn trỏ tới release mới nhất.
 UPDATE_MANIFEST_URL = (
-    "https://github.com/doanleox/snapzhot/releases/latest/download/latest.json"
+    "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/latest.json"
 )
 
 # User-Agent rõ ràng để server nhận diện, tránh bị một số host chặn request "lạ".
