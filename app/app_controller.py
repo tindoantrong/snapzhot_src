@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QPushButton,
     QSystemTrayIcon,
     QTextEdit,
@@ -136,6 +137,14 @@ class _UpdateDialog(QDialog):
     def _on_action(self) -> None:
         # Khi có bản mới: nút là "Tải về" → mở URL. Ngược lại: chạy kiểm tra mới.
         if self._mode == "available" and self._download_url:
+            if not updater.is_safe_update_url(self._download_url):
+                QMessageBox.warning(
+                    self,
+                    "URL cập nhật không hợp lệ",
+                    "URL tải về không hợp lệ hoặc không an toàn và đã bị chặn.\n"
+                    "Chỉ chấp nhận liên kết https://github.com/…",
+                )
+                return
             QDesktopServices.openUrl(QUrl(self._download_url))
             return
         self.show_checking()
@@ -178,9 +187,12 @@ class _UpdateDialog(QDialog):
             else:
                 self.notes.hide()
             self.action_btn.setText("Tải về")
-            if info.url:
+            if updater.is_safe_update_url(info.url):
                 self.action_btn.setEnabled(True)
                 self.action_btn.setToolTip("")
+            elif info.url:
+                self.action_btn.setEnabled(False)
+                self.action_btn.setToolTip("URL cập nhật không hợp lệ/không an toàn, đã chặn.")
             else:
                 self.action_btn.setEnabled(False)
                 self.action_btn.setToolTip("Manifest không có liên kết tải về.")

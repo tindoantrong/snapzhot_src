@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -23,6 +24,28 @@ UPDATE_MANIFEST_URL = (
 
 # User-Agent rõ ràng để server nhận diện, tránh bị một số host chặn request "lạ".
 _USER_AGENT = "SnagTin-Updater"
+
+
+_SAFE_UPDATE_HOSTS = {"github.com", "www.github.com"}
+
+
+def is_safe_update_url(url: str | None) -> bool:
+    """Trả True CHỈ KHI url dùng https VÀ host thuộc github.com / www.github.com.
+
+    Mọi trường hợp khác (http, file, javascript, data, host lạ, url rỗng/None,
+    không parse được) đều trả False.
+    Hàm thuần — không gọi mạng, không side-effect.
+    """
+    if not url:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in _SAFE_UPDATE_HOSTS
 
 
 def parse_version(s: str) -> tuple[int, ...]:

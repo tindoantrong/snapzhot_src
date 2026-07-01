@@ -18,7 +18,7 @@ from app import __version__
 
 # Import hàm thuần và hàm ghi từ make_release
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from make_release import build_manifest, write_manifest  # noqa: E402
+from make_release import build_manifest, build_gh_command, expected_release_assets, write_manifest, _REPO  # noqa: E402
 
 # -----------------------------------------------------------------------
 # 1. build_manifest: trường version
@@ -104,6 +104,46 @@ try:
     print("OK: write_manifest notes_override ghi đè notes cũ")
 finally:
     os.unlink(tmp_path)
+
+
+# -----------------------------------------------------------------------
+# 7. build_gh_command: argv đúng cấu trúc
+# -----------------------------------------------------------------------
+fake_exe = f"dist/SnagTin-Setup-{__version__}.exe"
+fake_manifest = "latest.json"
+argv = build_gh_command(__version__, fake_exe, fake_manifest)
+
+assert argv[0] == "gh", f"argv[0] phải là 'gh', got: {argv[0]!r}"
+assert "release" in argv, "'release' phải có trong argv"
+assert "create" in argv, "'create' phải có trong argv"
+assert f"v{__version__}" in argv, f"tag 'v{__version__}' phải có trong argv"
+assert "--repo" in argv, "'--repo' phải có trong argv"
+_repo_idx = argv.index("--repo")
+assert argv[_repo_idx + 1] == _REPO, (
+    f"giá trị sau --repo phải là {_REPO!r}, got: {argv[_repo_idx + 1]!r}"
+)
+assert fake_exe in argv, f"đường dẫn setup exe phải có trong argv: {fake_exe!r}"
+assert fake_manifest in argv, f"đường dẫn manifest phải có trong argv: {fake_manifest!r}"
+print(f"OK: build_gh_command trả đúng argv (gh release create v{__version__}, repo={_REPO})")
+print(f"    2 asset: {fake_exe!r}, {fake_manifest!r}")
+
+
+# -----------------------------------------------------------------------
+# 8. expected_release_assets: trả đúng 2 basename
+# -----------------------------------------------------------------------
+fake_exe2 = f"dist/SnagTin-Setup-{__version__}.exe"
+fake_manifest2 = "latest.json"
+assets = expected_release_assets(__version__, fake_exe2, fake_manifest2)
+
+assert isinstance(assets, set), f"expected_release_assets phải trả set, got: {type(assets)}"
+assert len(assets) == 2, f"phải có đúng 2 asset, got: {assets!r}"
+assert f"SnagTin-Setup-{__version__}.exe" in assets, (
+    f"'SnagTin-Setup-{__version__}.exe' phải có trong set, got: {assets!r}"
+)
+assert "latest.json" in assets, (
+    f"'latest.json' phải có trong set, got: {assets!r}"
+)
+print(f"OK: expected_release_assets trả đúng 2 basename: {assets}")
 
 print()
 print("=== TEST RELEASE MANIFEST OK ===")

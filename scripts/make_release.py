@@ -8,6 +8,7 @@ Chạy:
   python scripts/make_release.py --skip-build           # chỉ sinh manifest, không build
   python scripts/make_release.py --iss-only             # manifest + chỉ bước ISCC
   python scripts/make_release.py --notes "Bản vá lỗi"  # ghi đè notes manifest
+  python scripts/make_release.py --publish              # sinh manifest + build + tự đẩy lên GitHub
 """
 import argparse
 import json
@@ -27,6 +28,31 @@ _REPO = "tindoantrong/snapzhot_src"
 # ---------------------------------------------------------------------------
 # Hàm THUẦN (dễ test, không side-effect)
 # ---------------------------------------------------------------------------
+
+def expected_release_assets(version: str, setup_exe_path: str, manifest_path: str) -> set:
+    """Trả về tập basename của 2 asset cần có trong release. Hàm thuần — không chạy gì."""
+    return {os.path.basename(setup_exe_path), os.path.basename(manifest_path)}
+
+
+def build_gh_command(version: str, setup_exe_path: str, manifest_path: str) -> list[str]:
+    """Trả về argv cho `gh release create`. Hàm thuần — không chạy gì."""
+    notes = ""
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                notes = str(json.load(f).get("notes", "")).strip()
+        except Exception:
+            pass
+    return [
+        "gh", "release", "create",
+        f"v{version}",
+        "--repo", _REPO,
+        "--title", f"SnagTin v{version}",
+        "--notes", notes,
+        setup_exe_path,
+        manifest_path,
+    ]
+
 
 def build_manifest(version: str, notes: str) -> dict:
     """Trả về dict manifest autoupdate. Hàm thuần — không đọc/ghi file."""
@@ -84,6 +110,8 @@ def main() -> int:
                     help="manifest + truyền --iss-only xuống build_installer")
     ap.add_argument("--notes", metavar="TEXT", default=None,
                     help="ghi đè notes trong manifest (mặc định: giữ notes cũ)")
+    ap.add_argument("--publish", action="store_true",
+                    help="sau khi build xong, tự đẩy release lên GitHub qua gh CLI (opt-in)")
     args = ap.parse_args()
 
     print(f"=== MAKE RELEASE SnagTin v{__version__} ===")
@@ -110,24 +138,74 @@ def main() -> int:
     else:
         print("\n[build] --skip-build: bỏ qua bước build installer.")
 
-    # (c) Checklist release
+    # (c) Publish hoặc in checklist thủ công
     ver = __version__
-    setup_exe = f"dist/SnagTin-Setup-{ver}.exe"
-    print()
-    print("=" * 60)
-    print("CHECKLIST RELEASE — 2 artifact cần upload:")
-    print(f"  1) {setup_exe}")
-    print(f"  2) latest.json")
-    print()
-    print(f"Repo đích: https://github.com/{_REPO}")
-    print()
-    print("Các bước upload thủ công (gh CLI chưa cài):")
-    print(f"  1) Vào github.com/{_REPO}/releases/new")
-    print(f"  2) Tạo tag: v{ver}  |  Tiêu đề: SnagTin v{ver}")
-    print(f"  3) Đính kèm: {setup_exe}")
-    print( "  4) Đính kèm: latest.json  (vào cùng release)")
-    print( "  5) Nhấn Publish release")
-    print("=" * 60)
+    setup_exe = os.path.join(ROOT, "dist", f"SnagTin-Setup-{ver}.exe")
+    setup_exe_rel = os.path.relpath(setup_exe, ROOT)
+
+    if args.publish and not args.skip_build:
+        # Kiểm tra file exe tồn tại
+        if not os.path.exists(setup_exe):
+            print(f"\nLỖI: Không tìm thấy {setup_exe_rel} — chưa build thành công.")
+            return 1
+
+        # Verify gh auth
+        print()
+        print("[publish] Kiểm tra gh auth status...")
+        auth_ret = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True, text=True
+        )
+        if auth_ret.returncode != 0:
+            print("LỖI: gh chưa đăng nhập. Chạy lệnh sau rồi thử lại:")
+            print("  gh auth login --hostname github.com --git-protocol https --web")
+            return 1
+
+        # Chạy gh release create
+        cmd = build_gh_command(ver, setup_exe, MANIFEST_PATH)
+        print(f"[publish] Chạy: gh release create v{ver} ...")
+        ret = subprocess.run(cmd, cwd=ROOT).returncode
+        if ret != 0:
+            print(f"\nLỖI: gh release create trả về code {ret}.")
+            return ret
+
+        # Verify asset sau publish
+        verify = subprocess.run(
+            ["gh", "release", "view", f"v{ver}",
+             "--repo", _REPO, "--json", "assets", "--jq", ".assets[].name"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        actual = set(verify.stdout.strip().splitlines()) if verify.returncode == 0 else set()
+        expected = expected_release_assets(ver, setup_exe, MANIFEST_PATH)
+        missing = expected - actual
+        if missing:
+            print(f"\nCẢNH BÁO: release v{ver} thiếu asset: {', '.join(sorted(missing))}")
+            for name in sorted(missing):
+                src = setup_exe if name == os.path.basename(setup_exe) else MANIFEST_PATH
+                print(f"  gh release upload v{ver} {src} --repo {_REPO} --clobber")
+            return 1
+        print(f"\nVerify OK: release v{ver} có đủ {len(expected)} asset.")
+        print(f"Đã publish release v{ver} lên github.com/{_REPO}")
+    else:
+        # Fallback: checklist thủ công
+        print()
+        print("=" * 60)
+        print("CHECKLIST RELEASE — 2 artifact cần upload:")
+        print(f"  1) {setup_exe_rel}")
+        print( "  2) latest.json")
+        print()
+        print(f"Repo đích: https://github.com/{_REPO}")
+        print()
+        print("Upload tự động (gh CLI đã cài):")
+        print(f"  release.bat --publish")
+        print()
+        print("Upload thủ công:")
+        print(f"  1) Vào github.com/{_REPO}/releases/new")
+        print(f"  2) Tạo tag: v{ver}  |  Tiêu đề: SnagTin v{ver}")
+        print(f"  3) Đính kèm: {setup_exe_rel}")
+        print( "  4) Đính kèm: latest.json  (vào cùng release)")
+        print( "  5) Nhấn Publish release")
+        print("=" * 60)
 
     return 0
 
