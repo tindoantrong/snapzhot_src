@@ -2,11 +2,11 @@
 ;  SnagTin — Inno Setup script (đóng gói bản onedir thành Setup.exe)
 ;  Nguồn: dist\SnagTin\  (PyInstaller onedir: SnagTin.exe + _internal\)
 ;  Compile: ISCC.exe installer\SnagTin.iss  (hoặc qua scripts\build_installer.py)
-;  Có thể override version: ISCC /DMyAppVersion=0.1.2 installer\SnagTin.iss
+;  Có thể override version: ISCC /DMyAppVersion=0.1.3 installer\SnagTin.iss
 ; ============================================================================
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.2"
+  #define MyAppVersion "0.1.3"
 #endif
 
 #define MyAppName "SnagTin"
