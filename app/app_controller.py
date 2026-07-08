@@ -43,8 +43,9 @@ from .recording.recorder import VideoRecorder
 import logging
 
 _log = logging.getLogger(__name__)
-# Windows có thể gỡ WH_KEYBOARD_LL hook ngầm khi callback chậm (LowLevelHooksTimeout ~300ms).
-# Tái đăng ký định kỳ mỗi 5 giây để đảm bảo hotkey luôn hoạt động.
+# Watchdog kiểm tra listener thread còn sống mỗi 5 giây; nếu chết → hard-restart để
+# tái cài WH_KEYBOARD_LL hook thật sự. KHÔNG tái đăng ký định kỳ — xem ghi chú rò rỉ
+# thread trong _hard_restart_keyboard_listener().
 _HOTKEY_WATCHDOG_INTERVAL_MS = 5_000
 
 
@@ -339,6 +340,10 @@ class AppController(QObject):
         self._hotkey_action = QAction("Cài đặt phím tắt chụp vùng…", self)
         self._hotkey_action.triggered.connect(self._open_hotkey_settings)
         menu.addAction(self._hotkey_action)
+
+        self._reregister_act = QAction("Đăng ký lại phím tắt chụp", self)
+        self._reregister_act.triggered.connect(self._manual_reregister_hotkeys)
+        menu.addAction(self._reregister_act)
         menu.addSeparator()
 
         lib_act = QAction("Mở thư viện", self)
@@ -845,7 +850,12 @@ class AppController(QObject):
         self._start_hotkey_watchdog()
 
     def reload_global_hotkeys(self) -> None:
-        """Gỡ toàn bộ hotkey đang đăng ký rồi đăng ký lại theo config hiện tại."""
+        """Gỡ và đăng ký lại hotkey theo config hiện tại (Python-level callback tables).
+
+        Lưu ý: ``remove_all_hotkeys()`` + ``add_hotkey()`` KHÔNG tái cài WH_KEYBOARD_LL
+        OS hook — chỉ thao tác ``_listener.blocking_hotkeys``/``nonblocking_hotkeys``.
+        Để thật sự restart OS hook, dùng ``_hard_restart_keyboard_listener()``.
+        """
         try:
             import keyboard
             keyboard.remove_all_hotkeys()
@@ -859,7 +869,7 @@ class AppController(QObject):
             self._register_escape()
 
     def _start_hotkey_watchdog(self) -> None:
-        """Khởi watchdog định kỳ tái đăng ký hotkey — chỉ tạo 1 lần, chạy liên tục."""
+        """Khởi watchdog phát hiện listener thread chết — chỉ tạo 1 lần, chạy liên tục."""
         if self._hotkey_watchdog is None:
             self._hotkey_watchdog = QTimer(self)
             self._hotkey_watchdog.setInterval(_HOTKEY_WATCHDOG_INTERVAL_MS)
@@ -868,29 +878,115 @@ class AppController(QObject):
             self._hotkey_watchdog.start()
 
     def _watchdog_reregister_hotkeys(self) -> None:
-        """Tái đăng ký hotkey định kỳ — phòng WH_KEYBOARD_LL bị Windows gỡ hook ngầm.
+        """Watchdog phát hiện listener thread chết → hard-restart tái cài WH_KEYBOARD_LL.
 
-        Windows gỡ WH_KEYBOARD_LL hook khi callback vượt LowLevelHooksTimeout (~300ms
-        mặc định). Thư viện ``keyboard`` không tự phát hiện: ``_hooks``/``_hotkeys``
-        nội bộ vẫn còn entries nhưng OS-level hook đã chết câm → PrtScn vô tác dụng.
-        Giải pháp: gọi ``reload_global_hotkeys()`` định kỳ để tái thiết lập hook,
-        đảm bảo không đăng ký trùng (remove_all_hotkeys trước khi add lại).
+        KHÔNG tái đăng ký định kỳ — mỗi hard-restart rò rỉ 1 processing_thread:
+        ``_GenericListener.__init__`` tạo ``queue = Queue()`` một lần duy nhất,
+        ``init()`` không reset nó, ``process()`` chạy ``while True: queue.get()`` vô
+        hạn → processing_thread cũ kẹt mãi trên queue cũ (daemon, không block thoát app
+        nhưng tích lũy theo giờ). Vì vậy hard-restart chỉ khi PHÁT HIỆN thread chết.
+
+        Kịch bản "thread sống, hook bị Windows gỡ ngầm (LowLevelHooksTimeout)": không
+        phát hiện được từ Python. Lối thoát: tray "Đăng ký lại phím tắt chụp".
         """
         try:
             import keyboard
+            listener = keyboard._listener
         except Exception:
             return
-        # Phát hiện nhanh: hook đã bị xóa hẳn khỏi thư viện (ai đó gọi remove_all_hotkeys)
-        hooks_empty = not bool(getattr(keyboard, "_hooks", None))
-        if hooks_empty:
+
+        thread = getattr(listener, "listening_thread", None)
+        if thread is None or not thread.is_alive():
             _log.warning(
-                "[hotkey-watchdog] keyboard._hooks rỗng — hook đã mất hẳn, tái đăng ký ngay."
+                "[hotkey-watchdog] Listener thread %s — hard-restart tái cài OS hook.",
+                "chưa khởi động" if thread is None else "đã chết",
             )
-        else:
-            # Hook còn trong thư viện nhưng có thể đã bị Windows gỡ OS-level ngầm
-            # (không phát hiện được từ Python) → tái đăng ký phòng ngừa.
-            _log.debug("[hotkey-watchdog] Tái đăng ký phòng ngừa định kỳ.")
-        self.reload_global_hotkeys()
+            try:
+                keyboard.remove_all_hotkeys()
+            except Exception:
+                pass
+            self._esc_handle = None
+            if self._hard_restart_keyboard_listener():
+                self.install_global_hotkeys()
+                if self._delay_timer.isActive() or self._recording:
+                    self._register_escape()
+                _log.info("[hotkey-watchdog] Hard-restart hoàn tất, hotkey đã đăng ký lại.")
+
+    def _hard_restart_keyboard_listener(self) -> bool:
+        """Hard-restart keyboard listener thread để tái cài đặt WH_KEYBOARD_LL OS hook.
+
+        ``add_hotkey()`` / ``remove_all_hotkeys()`` CHỈ thao tác Python-level callback
+        tables; ``_listener.start_if_necessary()`` là NO-OP khi ``listening=True``
+        (``_generic.py:34``). ``SetWindowsHookEx`` chỉ được gọi ở ``_winkeyboard.py:554``
+        bên trong ``listen()`` → phải restart thread để tái cài hook thật sự.
+
+        Rò rỉ thread (bằng chứng từ source v0.13.5):
+        - ``_generic.py:17``: ``self.queue = Queue()`` tạo một lần trong ``__init__``.
+        - ``_KeyboardListener.init()`` (``__init__.py:195-209``) KHÔNG reset queue.
+        - ``_generic.py:51-60``: ``process()`` chạy ``while True: queue.get()`` không có
+          exit condition → processing_thread cũ kẹt mãi trên queue cũ sau restart.
+        Hàm này CHỈ được gọi khi phát hiện thread đã chết, KHÔNG gọi theo chu kỳ.
+
+        Trả về True nếu ``listening`` đã được reset (sẵn sàng cho ``start_if_necessary``).
+        """
+        try:
+            import ctypes
+            import keyboard as _kb
+            listener = _kb._listener
+        except Exception:
+            _log.warning("[hotkey] hard-restart: không import được keyboard._listener.")
+            return False
+        try:
+            thread = getattr(listener, "listening_thread", None)
+            if thread is not None and thread.is_alive():
+                # native_id = Windows thread ID thật, cần cho PostThreadMessageW.
+                # thread.ident là CPython internal ID — khác với OS thread ID.
+                # native_id có từ Python 3.8+; fallback graceful nếu không có.
+                native_id = getattr(thread, "native_id", None)
+                if native_id:
+                    WM_QUIT = 0x0012
+                    ctypes.windll.user32.PostThreadMessageW(native_id, WM_QUIT, 0, 0)
+                    thread.join(timeout=1.0)  # GetMessage trả False ngay sau WM_QUIT
+                else:
+                    _log.warning(
+                        "[hotkey] hard-restart: native_id không có (Python < 3.8?),"
+                        " bỏ qua PostThreadMessage."
+                    )
+            # Reset flag để start_if_necessary() tạo thread mới + SetWindowsHookEx mới.
+            listener.listening = False
+            return True
+        except Exception:
+            _log.warning(
+                "[hotkey] hard-restart thất bại (internal keyboard struct đổi?); "
+                "graceful fallback.",
+                exc_info=True,
+            )
+            return False
+
+    def _manual_reregister_hotkeys(self) -> None:
+        """Hard-restart và đăng ký lại hotkey thủ công — lối thoát khi PrtScn chết câm.
+
+        Bao gồm cả kịch bản "thread sống nhưng hook bị Windows gỡ ngầm" không thể
+        phát hiện tự động; user kích hoạt qua tray menu khi nhận thấy hotkey mất.
+        """
+        _log.info("[hotkey] Tái đăng ký thủ công qua tray menu.")
+        ok = self._hard_restart_keyboard_listener()
+        try:
+            import keyboard
+            keyboard.remove_all_hotkeys()
+        except Exception:
+            pass
+        self._esc_handle = None
+        self.install_global_hotkeys()
+        if self._delay_timer.isActive() or self._recording:
+            self._register_escape()
+        msg = (
+            "Đã đăng ký lại phím tắt chụp."
+            if ok else
+            "Đã đăng ký lại hotkey (listener vẫn sống)."
+        )
+        _log.info("[hotkey] %s", msg)
+        self.tray.showMessage(APP_NAME, msg, msecs=2000)
 
     def shutdown(self) -> None:
         if self._hotkey_watchdog is not None:
