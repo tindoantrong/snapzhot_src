@@ -267,6 +267,8 @@ class EditorWindow(QMainWindow):
     open_capture_requested = Signal(int)
     # Phát capture_id khi người dùng yêu cầu xoá ảnh từ dải "Ảnh gần đây".
     delete_capture_requested = Signal(int)
+    # Phát khi người dùng muốn quay về thư viện.
+    request_library = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -308,6 +310,15 @@ class EditorWindow(QMainWindow):
         tb.setStyleSheet("QToolBar { padding:4px; spacing:6px; }")
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(Qt.TopToolBarArea, tb)
+
+        # Nút về thư viện — đặt ở đầu toolbar, tách bằng separator với nhóm chụp.
+        act_library = QAction("Về thư viện", self)
+        act_library.setIcon(tool_icon("open"))
+        act_library.setToolTip("Quay lại màn hình thư viện")
+        act_library.triggered.connect(self.request_library.emit)
+        tb.addAction(act_library)
+        tb.addSeparator()
+
         for text, icon, signal, tip in (
             ("Chụp vùng", "capture_region", self.request_capture_region, "Chụp một vùng màn hình"),
             ("Chụp toàn màn hình", "capture_full", self.request_capture_fullscreen, "Chụp toàn bộ màn hình"),

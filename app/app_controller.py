@@ -228,6 +228,8 @@ class AppController(QObject):
         self.editor.open_capture_requested.connect(self._open_capture_in_editor)
         # Yêu cầu xoá ảnh từ dải "Ảnh gần đây".
         self.editor.delete_capture_requested.connect(self._on_delete_capture)
+        # Nút "Về thư viện" trong Editor → hiện màn hình thư viện.
+        self.editor.request_library.connect(self.show_library)
 
         self.library_window = LibraryWindow(self.library)
         self.library_window.open_in_editor.connect(self._open_capture_in_editor)
