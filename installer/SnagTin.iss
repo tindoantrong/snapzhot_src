@@ -37,6 +37,15 @@ UninstallDisplayName={#MyAppName} {#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+; Phát hiện app đang chạy: Inno chặn & nhắc user đóng app trước khi cài/nâng cấp.
+; Tên mutex PHẢI trùng khít với _INSTALLER_MUTEX_NAME trong main.py.
+AppMutex=Global\SnagTinAppMutex
+; Dùng Restart Manager để hỗ trợ đóng app tự động nếu user chọn.
+CloseApplications=yes
+; Khi nâng cấp: tự dùng thư mục cũ (dựa vào AppId cố định), không hỏi lại.
+; Khi cài mới: hiện trang chọn thư mục bình thường.
+UsePreviousAppDir=yes
+DisableDirPage=auto
 ; Xuất Setup.exe vào dist\ cạnh thư mục onedir.
 OutputDir=..\dist
 OutputBaseFilename=SnagTin-Setup-{#MyAppVersion}
@@ -70,3 +79,32 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; Xoá sạch thư mục cài (kể cả file phát sinh runtime trong {app}).
 ; LƯU Ý: KHÔNG đụng %LOCALAPPDATA%\SnagTin (thư viện ảnh/video của user được giữ lại).
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+{ Kiểm tra xem đã có phiên bản trước được cài chưa,
+  dựa vào registry uninstall key của AppId cố định. }
+function IsUpgrade(): Boolean;
+var
+  SubKey: String;
+  Dummy: String;
+begin
+  SubKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' +
+            '{#SetupSetting("AppId")}_is1';
+  { Kiểm HKLM (cài system-wide) và HKCU (cài per-user); HKLM trả 64-bit view
+    vì installer chạy x64 (ArchitecturesInstallIn64BitMode=x64compatible). }
+  Result := RegQueryStringValue(HKLM, SubKey, 'UninstallString', Dummy) or
+            RegQueryStringValue(HKCU, SubKey, 'UninstallString', Dummy);
+end;
+
+{ Đổi caption nút khi đây là lần nâng cấp, giữ nguyên cho cài mới. }
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if IsUpgrade() then begin
+    if CurPageID = wpReady then
+      WizardForm.NextButton.Caption := 'Cập nhật';
+    if CurPageID = wpWelcome then
+      WizardForm.WelcomeLabel2.Caption :=
+        'Trình cài đặt sẽ nâng cấp {#MyAppName} lên phiên bản {#MyAppVersion}.' + #13#10 +
+        'Nhấn Tiếp theo để tiếp tục, hoặc Hủy để thoát.';
+  end;
+end;

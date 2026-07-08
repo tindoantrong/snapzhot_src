@@ -32,6 +32,20 @@ def main() -> int:
     # Không thoát khi đóng cửa sổ cuối - app sống ở khay hệ thống.
     app.setQuitOnLastWindowClosed(False)
 
+    # Tạo mutex để installer nhận biết app đang chạy.
+    # Phải trùng khít với AppMutex= trong installer/SnagTin.iss.
+    # Dùng namespace Global\ để installer (chạy với quyền admin) cũng thấy được
+    # mutex tạo bởi tiến trình user thường (Local namespace).
+    if sys.platform == "win32":
+        import ctypes
+        _INSTALLER_MUTEX_NAME = "Global\\SnagTinAppMutex"
+        try:
+            _h_mutex = ctypes.windll.kernel32.CreateMutexW(None, False,
+                                                            _INSTALLER_MUTEX_NAME)
+            app._installer_mutex = _h_mutex  # giữ handle suốt vòng đời process
+        except Exception:
+            pass
+
     from PySide6.QtWidgets import QSystemTrayIcon
     if not QSystemTrayIcon.isSystemTrayAvailable():
         QMessageBox.warning(None, APP_NAME,

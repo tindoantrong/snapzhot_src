@@ -40,6 +40,13 @@ from .recording.audio_recorder import AudioRecorder, audio_available, mux_audio_
 from .recording.record_bar import RecordBar
 from .recording.recorder import VideoRecorder
 
+import logging
+
+_log = logging.getLogger(__name__)
+# Windows có thể gỡ WH_KEYBOARD_LL hook ngầm khi callback chậm (LowLevelHooksTimeout ~300ms).
+# Tái đăng ký định kỳ mỗi 5 giây để đảm bảo hotkey luôn hoạt động.
+_HOTKEY_WATCHDOG_INTERVAL_MS = 5_000
+
 
 _UPDATE_QSS = """
 QDialog { background:#2B2D31; }
@@ -259,6 +266,8 @@ class AppController(QObject):
         self._recording = False
         self._recording_region: dict | None = None
         self._esc_handle = None
+        # Watchdog định kỳ tái đăng ký hotkey — phòng WH_KEYBOARD_LL bị Windows gỡ ngầm.
+        self._hotkey_watchdog: QTimer | None = None
 
         # Âm thanh micro (cộng thêm; suy giảm nhẹ nhàng nếu thiếu thiết bị).
         self._audio_recorder: AudioRecorder | None = None
@@ -833,6 +842,7 @@ class AppController(QObject):
         except Exception:
             # Một số máy cần quyền admin để hook bàn phím toàn cục.
             pass
+        self._start_hotkey_watchdog()
 
     def reload_global_hotkeys(self) -> None:
         """Gỡ toàn bộ hotkey đang đăng ký rồi đăng ký lại theo config hiện tại."""
@@ -848,7 +858,43 @@ class AppController(QObject):
         if self._delay_timer.isActive() or self._recording:
             self._register_escape()
 
+    def _start_hotkey_watchdog(self) -> None:
+        """Khởi watchdog định kỳ tái đăng ký hotkey — chỉ tạo 1 lần, chạy liên tục."""
+        if self._hotkey_watchdog is None:
+            self._hotkey_watchdog = QTimer(self)
+            self._hotkey_watchdog.setInterval(_HOTKEY_WATCHDOG_INTERVAL_MS)
+            self._hotkey_watchdog.timeout.connect(self._watchdog_reregister_hotkeys)
+        if not self._hotkey_watchdog.isActive():
+            self._hotkey_watchdog.start()
+
+    def _watchdog_reregister_hotkeys(self) -> None:
+        """Tái đăng ký hotkey định kỳ — phòng WH_KEYBOARD_LL bị Windows gỡ hook ngầm.
+
+        Windows gỡ WH_KEYBOARD_LL hook khi callback vượt LowLevelHooksTimeout (~300ms
+        mặc định). Thư viện ``keyboard`` không tự phát hiện: ``_hooks``/``_hotkeys``
+        nội bộ vẫn còn entries nhưng OS-level hook đã chết câm → PrtScn vô tác dụng.
+        Giải pháp: gọi ``reload_global_hotkeys()`` định kỳ để tái thiết lập hook,
+        đảm bảo không đăng ký trùng (remove_all_hotkeys trước khi add lại).
+        """
+        try:
+            import keyboard
+        except Exception:
+            return
+        # Phát hiện nhanh: hook đã bị xóa hẳn khỏi thư viện (ai đó gọi remove_all_hotkeys)
+        hooks_empty = not bool(getattr(keyboard, "_hooks", None))
+        if hooks_empty:
+            _log.warning(
+                "[hotkey-watchdog] keyboard._hooks rỗng — hook đã mất hẳn, tái đăng ký ngay."
+            )
+        else:
+            # Hook còn trong thư viện nhưng có thể đã bị Windows gỡ OS-level ngầm
+            # (không phát hiện được từ Python) → tái đăng ký phòng ngừa.
+            _log.debug("[hotkey-watchdog] Tái đăng ký phòng ngừa định kỳ.")
+        self.reload_global_hotkeys()
+
     def shutdown(self) -> None:
+        if self._hotkey_watchdog is not None:
+            self._hotkey_watchdog.stop()
         if self._update_thread is not None:
             self._update_thread.quit()
             self._update_thread.wait(2000)
