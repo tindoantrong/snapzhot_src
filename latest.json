@@ -1,5 +1,5 @@
 {
-  "version": "0.1.4",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.4.exe",
+  "version": "0.1.5",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.5.exe",
   "notes": "Sửa lỗi phím tắt chụp vùng (Print Screen) đôi khi tự mất tác dụng — tự động cài lại hook bàn phím (WH_KEYBOARD_LL) khi bị Windows gỡ + thêm menu khay 'Đăng ký lại phím tắt chụp' để khôi phục thủ công. Thêm nút 'Về thư viện' trong trình chỉnh sửa."
 }
