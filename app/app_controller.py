@@ -502,7 +502,9 @@ class AppController(QObject):
             return
         try:
             import keyboard
-            self._esc_handle = keyboard.add_hotkey("esc", lambda: self.request_escape.emit())
+            self._esc_handle = keyboard.add_hotkey(
+                "esc", lambda: self._emit_safe(self.request_escape)
+            )
         except Exception:
             self._esc_handle = None
 
@@ -817,6 +819,22 @@ class AppController(QObject):
         self.library_window.activateWindow()
 
     # ---------- phím tắt toàn cục ----------
+    def _emit_safe(self, signal) -> None:
+        """Phát signal an toàn từ keyboard thread — KHÔNG BAO GIỜ để exception thoát ra.
+
+        Mục đích: ``_generic.process()`` gọi ``pre_process_event()`` KHÔNG có try/except
+        → nếu callback ném exception → ``processing_thread`` chết vĩnh viễn → hotkey chết
+        đến khi restart app. Bọc tất cả callback keyboard bằng hàm này để ngăn điều đó.
+
+        Dùng cho signal với ``Qt.QueuedConnection``: ``emit()`` chỉ post event vào Qt
+        event queue của main thread, không chạy slot ngay trong keyboard thread → an toàn.
+        """
+        try:
+            signal.emit()
+        except Exception:
+            _log.exception("[hotkey] signal.emit() ném exception trong keyboard thread"
+                           " — đã chặn để bảo vệ processing_thread.")
+
     def install_global_hotkeys(self) -> None:
         """Đăng ký phím tắt toàn cục bằng thư viện `keyboard` (nếu có).
 
@@ -832,12 +850,15 @@ class AppController(QObject):
         region_key = self.config.get("hotkey_region", "print screen")
         try:
             keyboard.add_hotkey(
-                region_key, lambda: self.request_region.emit(), suppress=True
+                region_key,
+                lambda: self._emit_safe(self.request_region),
+                suppress=True,
             )
         except Exception:
             try:
                 keyboard.add_hotkey(
-                    region_key, lambda: self.request_region.emit()
+                    region_key,
+                    lambda: self._emit_safe(self.request_region),
                 )
             except Exception:
                 pass
@@ -845,11 +866,11 @@ class AppController(QObject):
         try:
             keyboard.add_hotkey(
                 self.config.get("hotkey_fullscreen", "ctrl+shift+f"),
-                lambda: self.request_fullscreen.emit(),
+                lambda: self._emit_safe(self.request_fullscreen),
             )
             keyboard.add_hotkey(
                 self.config.get("hotkey_video", "ctrl+shift+r"),
-                lambda: self.request_video_toggle.emit(),
+                lambda: self._emit_safe(self.request_video_toggle),
             )
         except Exception:
             # Một số máy cần quyền admin để hook bàn phím toàn cục.
@@ -885,17 +906,19 @@ class AppController(QObject):
             self._hotkey_watchdog.start()
 
     def _watchdog_reregister_hotkeys(self) -> None:
-        """Watchdog 2-trong-1: phát hiện thread chết + periodic hard-restart phòng ngừa.
+        """Watchdog 3-trong-1: giám sát CẢ HAI thread + periodic OS-hook reinstall.
 
-        Hai kịch bản cần hard-restart:
-        1. ``listening_thread`` chết (crash / atexit bug) → phát hiện được, restart ngay.
-        2. Thread sống nhưng WH_KEYBOARD_LL bị Windows gỡ ngầm (``LowLevelHooksTimeout``)
-           → KHÔNG phát hiện được từ Python → restart phòng ngừa mỗi
-           ``_HOTKEY_HOOK_REINSTALL_TICKS`` tick (30 s mặc định).
+        Kịch bản được xử lý:
+        1. ``processing_thread`` chết (exception từ callback → propagate qua
+           ``pre_process_event()`` vì không có try/except) → hotkey chết hoàn toàn:
+           events vào queue nhưng không ai xử lý. Restart processing_thread ngay.
+        2. ``listening_thread`` chết → không có event nào vào queue → restart ngay.
+        3. Cả 2 sống nhưng WH_KEYBOARD_LL bị Windows gỡ ngầm (``LowLevelHooksTimeout``)
+           → restart ``listening_thread`` phòng ngừa mỗi ``_HOTKEY_HOOK_REINSTALL_TICKS``
+           tick (30 s mặc định).
 
-        Hard-restart giờ LEAK-FREE (chỉ thay ``listening_thread``; không đụng
-        ``processing_thread`` hay ``listening`` flag) → handlers persist, không cần
-        ``install_global_hotkeys()`` sau restart.
+        Tất cả restart KHÔNG đụng ``listening`` flag, KHÔNG re-add hotkey (handlers
+        persist). Guard chống double-thread trong mỗi hàm restart con.
         """
         self._hotkey_watchdog_tick += 1
 
@@ -905,14 +928,38 @@ class AppController(QObject):
         except Exception:
             return
 
-        thread = getattr(lst, "listening_thread", None)
-        thread_dead = thread is None or not thread.is_alive()
-        periodic = (self._hotkey_watchdog_tick % _HOTKEY_HOOK_REINSTALL_TICKS == 0)
+        listen_thread = getattr(lst, "listening_thread", None)
+        proc_thread   = getattr(lst, "processing_thread", None)
+        listen_alive  = listen_thread is not None and listen_thread.is_alive()
+        proc_alive    = proc_thread   is not None and proc_thread.is_alive()
+        periodic      = (self._hotkey_watchdog_tick % _HOTKEY_HOOK_REINSTALL_TICKS == 0)
 
-        if thread_dead:
+        # Log chẩn đoán mỗi chu kỳ 30 s để pin nguyên nhân nếu user báo lỗi.
+        if periodic:
+            _log.debug(
+                "[hotkey-watchdog] tick=%d | listening_thread=%s | processing_thread=%s"
+                " | queue_size=%d",
+                self._hotkey_watchdog_tick,
+                "alive" if listen_alive else "DEAD",
+                "alive" if proc_alive   else "DEAD",
+                lst.queue.qsize(),
+            )
+
+        if not proc_alive:
+            # NGUY HIỂM NHẤT: processing_thread chết → không ai drain queue → hotkey im.
             _log.warning(
-                "[hotkey-watchdog] Listener thread %s — hard-restart tái cài OS hook.",
-                "chưa khởi động" if thread is None else "đã chết",
+                "[hotkey-watchdog] processing_thread %s — khôi phục.",
+                "chưa khởi động" if proc_thread is None else "đã chết",
+            )
+            self._restart_processing_thread(lst)
+            # Cũng kiểm tra listening_thread vì nếu nó cũng chết thì queue rỗng mãi.
+            if not listen_alive:
+                _log.warning("[hotkey-watchdog] listening_thread cũng chết — hard-restart.")
+                self._hard_restart_keyboard_listener()
+        elif not listen_alive:
+            _log.warning(
+                "[hotkey-watchdog] listening_thread %s — hard-restart tái cài OS hook.",
+                "chưa khởi động" if listen_thread is None else "đã chết",
             )
             self._hard_restart_keyboard_listener()
         elif periodic:
@@ -983,22 +1030,94 @@ class AppController(QObject):
             _log.warning("[hotkey] hard-restart thất bại.", exc_info=True)
             return False
 
-    def _manual_reregister_hotkeys(self) -> None:
-        """Hard-restart thủ công qua tray menu — lối thoát khi PrtScn chết câm.
+    def _restart_processing_thread(self, lst) -> bool:
+        """Khởi động lại processing_thread đã chết — LEAK-FREE.
 
-        Bao gồm kịch bản "thread sống, hook bị Windows gỡ ngầm" không phát hiện tự động.
-        Không cần ``remove_all_hotkeys()`` hay ``install_global_hotkeys()``: hard-restart
-        chỉ thay ``listening_thread``; handlers trong ``blocking_hotkeys`` persist.
+        Leak-free vì: chỉ gọi khi old thread đã CHẾT (is_alive=False) → không có thread
+        nào blocked trên queue.get() → tạo thread mới không tạo thêm thread zombie.
+
+        Drain queue trước khi start thread mới để tránh bơm loạt event cũ (ví dụ: key
+        events tồn đọng trong lúc thread chết) gây chụp/escape/video toggle không mong muốn.
+
+        KHÔNG set ``listening=False``, KHÔNG re-add hotkey (handlers persist).
+        Guard: nếu old thread vẫn còn sống khi gọi → ABORT (không tạo 2 processing_thread).
+        """
+        import threading
+        import queue as _queue_mod
+        try:
+            old = getattr(lst, "processing_thread", None)
+            if old is not None and old.is_alive():
+                _log.error(
+                    "[hotkey] _restart_processing_thread: old thread vẫn sống — ABORT "
+                    "(chỉ gọi hàm này khi thread đã chết)."
+                )
+                return False
+
+            # Drain stale events tồn đọng trong queue.
+            drained = 0
+            try:
+                while True:
+                    lst.queue.get_nowait()
+                    lst.queue.task_done()
+                    drained += 1
+            except _queue_mod.Empty:
+                pass
+            except Exception:
+                pass
+            if drained:
+                _log.debug(
+                    "[hotkey] Đã drain %d stale event khỏi queue trước khi restart "
+                    "processing_thread.", drained,
+                )
+
+            t = threading.Thread(target=lst.process, daemon=True)
+            lst.processing_thread = t
+            t.start()
+            _log.info("[hotkey] processing_thread mới đã khởi động.")
+            return True
+        except Exception:
+            _log.warning("[hotkey] _restart_processing_thread thất bại.", exc_info=True)
+            return False
+
+    def _manual_reregister_hotkeys(self) -> None:
+        """Khôi phục TOÀN DIỆN thủ công qua tray menu — lối thoát khi PrtScn chết câm.
+
+        Khôi phục cả ``processing_thread`` lẫn ``listening_thread`` nếu một trong hai chết,
+        bao gồm kịch bản "thread sống, hook bị Windows gỡ ngầm" không phát hiện tự động.
+        Handlers trong ``blocking_hotkeys``/``nonblocking_hotkeys`` persist — không re-add.
         """
         _log.info("[hotkey] Tái đăng ký thủ công qua tray menu.")
-        ok = self._hard_restart_keyboard_listener()
-        msg = (
-            "Đã hard-restart keyboard listener, WH_KEYBOARD_LL hook tái cài thành công."
-            if ok else
-            "Hard-restart thất bại — kiểm tra log để biết chi tiết."
-        )
+        try:
+            import keyboard as _kb
+            lst = _kb._listener
+        except Exception:
+            self.tray.showMessage(APP_NAME, "Không load được keyboard library.", msecs=2000)
+            return
+
+        proc_thread = getattr(lst, "processing_thread", None)
+        proc_dead   = proc_thread is None or not proc_thread.is_alive()
+        proc_ok = True
+        if proc_dead:
+            _log.warning("[hotkey] manual: processing_thread đã chết — khôi phục.")
+            proc_ok = self._restart_processing_thread(lst)
+
+        listen_ok = self._hard_restart_keyboard_listener()
+
+        if proc_dead:
+            if proc_ok and listen_ok:
+                msg = "Đã khôi phục cả 2 thread hotkey (processing + listener)."
+            elif proc_ok:
+                msg = "processing_thread đã khôi phục; listening_thread restart thất bại — xem log."
+            else:
+                msg = "Khôi phục processing_thread thất bại — xem log."
+        else:
+            msg = (
+                "Đã hard-restart WH_KEYBOARD_LL hook thành công."
+                if listen_ok else
+                "Hard-restart thất bại — kiểm tra log để biết chi tiết."
+            )
         _log.info("[hotkey] %s", msg)
-        self.tray.showMessage(APP_NAME, msg, msecs=2000)
+        self.tray.showMessage(APP_NAME, msg, msecs=3000)
 
     def shutdown(self) -> None:
         if self._hotkey_watchdog is not None:
