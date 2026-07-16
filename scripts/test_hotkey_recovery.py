@@ -286,6 +286,104 @@ _emit_safe_impl(_GoodSignal())
 check(_GoodSignal.called, "4.2  _emit_safe gọi emit() trên signal bình thường")
 
 # ===========================================================================
+# CA 5: [HK3] stuck modifier clear — mirror exact logic từ
+#        AppController._hard_restart_keyboard_listener (sau old.join())
+#        Không cần OS hook thật, không cần bàn phím vật lý.
+# ===========================================================================
+print("\n=== CA 5: HK3 stuck modifier clear (headless) ===")
+
+
+class _FakeKeyEvent:
+    """Event object tối giản khớp giao diện keyboard.KeyboardEvent."""
+    def __init__(self, name: str, scan_code: int):
+        self.name = name
+        self.scan_code = scan_code
+        self.event_type = "down"
+        self.is_keypad = False
+        self.device = None
+        self.modifiers = None
+        self.time = None
+
+
+def _hk3_clear_stuck_modifiers(kb_mod, lst_mod) -> list[int]:
+    """Mirror EXACT code path của HK3-FIX trong _hard_restart_keyboard_listener.
+
+    Tách thành hàm để test gọi trực tiếp mà không cần restart OS hook.
+    Trả về danh sách scan_code đã xóa (để assert).
+    """
+    stale = []
+    with kb_mod._pressed_events_lock:
+        stale = [
+            sc for sc, ev in list(kb_mod._pressed_events.items())
+            if getattr(ev, "name", "") in kb_mod.all_modifiers
+        ]
+        for sc in stale:
+            kb_mod._pressed_events.pop(sc, None)
+    lst_mod.modifier_states.clear()
+    return stale
+
+
+try:
+    # -- Lấy scan_code thực của ctrl, shift, a từ keyboard lib --
+    def _first_sc(key_name: str, fallback: int) -> int:
+        try:
+            codes = keyboard.key_to_scan_codes(key_name, error_if_missing=False)
+            return codes[0] if codes else fallback
+        except Exception:
+            return fallback
+
+    ctrl_sc  = _first_sc("ctrl",  29)   # thường = 29 (left ctrl)
+    shift_sc = _first_sc("shift", 42)   # thường = 42 (left shift)
+    a_sc     = _first_sc("a",     30)   # thường = 30
+
+    # Đảm bảo 3 scan_code không trùng (tránh inject chồng nhau)
+    if len({ctrl_sc, shift_sc, a_sc}) != 3:
+        skip("CA5: 3 scan_code không phân biệt — bỏ qua")
+    else:
+        # -- Inject 2 modifier stuck + 1 phím thường --
+        with keyboard._pressed_events_lock:
+            keyboard._pressed_events[ctrl_sc]  = _FakeKeyEvent("ctrl",  ctrl_sc)
+            keyboard._pressed_events[shift_sc] = _FakeKeyEvent("shift", shift_sc)
+            keyboard._pressed_events[a_sc]     = _FakeKeyEvent("a",     a_sc)
+
+        keyboard._listener.modifier_states = {"ctrl": "allowed", "shift": "free"}
+
+        # Xác nhận trạng thái "stuck" đã inject thành công
+        check(keyboard.is_pressed("ctrl"),
+              "5.0  ctrl inject → is_pressed('ctrl') = True (giả lập stuck)")
+        check(keyboard.is_pressed("shift"),
+              "5.0b shift inject → is_pressed('shift') = True")
+
+        # -- Chạy đúng đoạn clear-stuck-modifier của HK3-FIX --
+        cleared = _hk3_clear_stuck_modifiers(keyboard, keyboard._listener)
+
+        # -- Assert kết quả --
+        check(not keyboard.is_pressed("ctrl"),
+              "5.1  is_pressed('ctrl') = False sau clear (stuck modifier đã giải phóng)")
+        check(not keyboard.is_pressed("shift"),
+              "5.2  is_pressed('shift') = False sau clear")
+        check(a_sc in keyboard._pressed_events,
+              "5.3  phím 'a' (non-modifier) VẪN còn trong _pressed_events")
+        check(keyboard._listener.modifier_states == {},
+              "5.4  modifier_states rỗng hoàn toàn sau clear")
+        check(len(cleared) == 2,
+              f"5.5  đúng 2 modifier scan_code bị xóa (ctrl+shift) — got {len(cleared)}")
+        check(ctrl_sc in cleared and shift_sc in cleared,
+              f"5.6  ctrl_sc={ctrl_sc} và shift_sc={shift_sc} đều nằm trong cleared={cleared}")
+
+        # -- Dọn phím 'a' còn lại (không để dơ state cho test khác) --
+        with keyboard._pressed_events_lock:
+            keyboard._pressed_events.pop(a_sc, None)
+
+        check(a_sc not in keyboard._pressed_events,
+              "5.7  cleanup: 'a' đã dọn sau test (state sạch)")
+
+except Exception as _ca5_err:
+    _FAIL += 1
+    print(f"  FAIL  CA5 lỗi không mong muốn: {_ca5_err!r}")
+
+
+# ===========================================================================
 # Dọn dẹp + summary
 # ===========================================================================
 print()
