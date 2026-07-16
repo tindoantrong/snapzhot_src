@@ -1020,6 +1020,38 @@ class AppController(QObject):
                     )
                     return False
 
+            # [HK3-FIX] Clear stuck modifier state.
+            # Khi listening_thread bị kill trong lúc phím modifier (Ctrl/Shift/Alt/Win)
+            # đang giữ vật lý, key-UP event bị mất (OS hook đã chết trước khi user thả
+            # phím) → keyboard._pressed_events kẹt với "ctrl held" vĩnh viễn → mọi thao
+            # tác sau tưởng Ctrl luôn nhấn.
+            # Xoá an toàn: old hook đã confirmed-dead (joined xong) → không còn event nào
+            # đến từ hook cũ; hook mới sẽ track trạng thái từ đầu (nếu phím vẫn đang giữ
+            # vật lý thì key-down event mới sẽ đến ngay từ hook mới).
+            try:
+                import keyboard as _kb2
+                stale_mods = []
+                with _kb2._pressed_events_lock:
+                    stale_mods = [
+                        sc for sc, ev in list(_kb2._pressed_events.items())
+                        if getattr(ev, "name", "") in _kb2.all_modifiers
+                    ]
+                    for sc in stale_mods:
+                        _kb2._pressed_events.pop(sc, None)
+                if stale_mods:
+                    _log.debug(
+                        "[hotkey] hard-restart: cleared %d stuck modifier scan-code(s): %s",
+                        len(stale_mods),
+                        stale_mods,
+                    )
+                lst.modifier_states.clear()
+            except Exception:
+                _log.debug(
+                    "[hotkey] hard-restart: clear modifier state không thực hiện được "
+                    "(không nghiêm trọng).",
+                    exc_info=True,
+                )
+
             # Thay CHỈ listening_thread; handlers và processing_thread không bị ảnh hưởng.
             t = threading.Thread(target=lst.listen, daemon=True)
             lst.listening_thread = t
