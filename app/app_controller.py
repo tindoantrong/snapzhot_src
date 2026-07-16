@@ -223,7 +223,6 @@ class _UpdateDialog(QDialog):
 class AppController(QObject):
     # Tín hiệu nội bộ để gọi chụp/quay từ luồng hotkey về luồng GUI an toàn.
     request_region = Signal()
-    request_fullscreen = Signal()
     request_video_toggle = Signal()
     request_escape = Signal()
 
@@ -295,7 +294,6 @@ class AppController(QObject):
 
         # Kết nối hàng đợi để chụp/quay được kích hoạt từ luồng khác (hotkey).
         self.request_region.connect(self.capture_region, Qt.QueuedConnection)
-        self.request_fullscreen.connect(self.capture_fullscreen, Qt.QueuedConnection)
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
 
@@ -864,10 +862,6 @@ class AppController(QObject):
                 pass
 
         try:
-            keyboard.add_hotkey(
-                self.config.get("hotkey_fullscreen", "ctrl+shift+f"),
-                lambda: self._emit_safe(self.request_fullscreen),
-            )
             keyboard.add_hotkey(
                 self.config.get("hotkey_video", "ctrl+shift+r"),
                 lambda: self._emit_safe(self.request_video_toggle),

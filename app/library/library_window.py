@@ -150,7 +150,7 @@ class LibraryWindow(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
         sub = QLabel(
             "Chụp ảnh hoặc quay video để bắt đầu.\n"
-            "Phím tắt: Ctrl+Shift+A (vùng) · Ctrl+Shift+F (toàn màn) · Ctrl+Shift+R (quay)."
+            "Phím tắt: Ctrl+Shift+A (vùng) · Ctrl+Shift+R (quay)."
         )
         sub.setObjectName("emptySub")
         sub.setWordWrap(True)

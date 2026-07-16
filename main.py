@@ -3,7 +3,6 @@
 Chạy:  python main.py
 App nằm ở khay hệ thống (system tray). Phím tắt mặc định:
     Ctrl+Shift+A : chụp vùng chọn
-    Ctrl+Shift+F : chụp toàn màn hình
 """
 from __future__ import annotations
 

@@ -8,7 +8,6 @@ from .paths import config_path
 
 DEFAULTS: dict[str, Any] = {
     "hotkey_region": "print screen",      # chụp vùng chọn (mặc định PrtScrn)
-    "hotkey_fullscreen": "ctrl+shift+f",  # chụp toàn màn hình
     "hotkey_video": "ctrl+shift+r",       # bật/tắt quay video
     "video_fps": 15,                      # FPS mục tiêu khi quay
     "record_audio": True,                 # thu mic kèm video (nếu có thiết bị)
