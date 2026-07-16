@@ -1,5 +1,5 @@
 {
-  "version": "0.1.6",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.6.exe",
-  "notes": "Sửa lỗi phím Ctrl (phải) bị kẹt như luôn được giữ sau khi dùng hotkey — nay tự giải phóng modifier khi khôi phục listener bàn phím. Thêm test hồi quy."
+  "version": "0.1.7",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.7.exe",
+  "notes": "Gỡ phím tắt Ctrl+Shift+F — tính năng chụp toàn màn hình vẫn dùng được qua tray menu và Library."
 }
