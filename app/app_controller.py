@@ -839,23 +839,16 @@ class AppController(QObject):
         except Exception:
             return  # không có keyboard -> bỏ qua, vẫn dùng được qua tray menu
 
-        # Phím chụp vùng: thử suppress=True (chặn hành vi mặc định của PrtScrn
-        # như mở Snip & Sketch / copy clipboard); máy không cho thì fallback.
+        # Phím chụp vùng: suppress=False (mặc định) để tắt modifier state machine
+        # của lib keyboard — tránh bơm fake Ctrl-DOWN gây kẹt modifier (HK5).
         region_key = self.config.get("hotkey_region", "print screen")
         try:
             keyboard.add_hotkey(
                 region_key,
                 lambda: self._emit_safe(self.request_region),
-                suppress=True,
             )
         except Exception:
-            try:
-                keyboard.add_hotkey(
-                    region_key,
-                    lambda: self._emit_safe(self.request_region),
-                )
-            except Exception:
-                pass
+            pass
 
         try:
             keyboard.add_hotkey(
