@@ -1,5 +1,5 @@
 {
-  "version": "0.1.7",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.7.exe",
-  "notes": "Gỡ phím tắt Ctrl+Shift+F — tính năng chụp toàn màn hình vẫn dùng được qua tray menu và Library."
+  "version": "0.1.8",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.8.exe",
+  "notes": "Gỡ hẳn cơ chế hard-restart listening_thread (HK4) — watchdog giờ chỉ khôi phục processing_thread; gỡ phím tắt Ctrl+Shift+F (tính năng chụp toàn màn hình vẫn dùng qua tray và Library)."
 }
