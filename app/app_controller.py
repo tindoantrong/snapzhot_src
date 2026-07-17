@@ -264,6 +264,7 @@ class AppController(QObject):
         self._recording = False
         self._recording_region: dict | None = None
         self._esc_handle = None
+        self._remove_region_hook = None  # cleanup handle cho hook_key PrtScn (tránh accumulate)
         # Watchdog phát hiện thread chết + periodic hard-restart phòng silent hook removal.
         self._hotkey_watchdog: QTimer | None = None
         self._hotkey_watchdog_tick: int = 0
@@ -835,23 +836,33 @@ class AppController(QObject):
         except Exception:
             return  # không có keyboard -> bỏ qua, vẫn dùng được qua tray menu
 
-        # Phím chụp vùng: thử suppress=True (chặn hành vi mặc định của PrtScrn
-        # như mở Snip & Sketch / copy clipboard); máy không cho thì fallback.
+        # Phím chụp vùng: dùng hook_key(suppress=True) thay add_hotkey(suppress=True).
+        # Lý do: add_hotkey suppress=True đưa PrtScn vào blocking_hotkeys → kích hoạt
+        # modifier state machine → Right Ctrl kẹt (CTRL-STUCK-FIX). hook_key dùng
+        # blocking_keys, được kiểm tra TRƯỚC state machine trong direct_callback → PrtScn
+        # vẫn bị suppress nhưng blocking_hotkeys giữ RỖNG → state machine không chạy.
+        # Lưu remove-handle để reload_global_hotkeys có thể gỡ đúng cách.
         region_key = self.config.get("hotkey_region", "print screen")
-        try:
-            keyboard.add_hotkey(
-                region_key,
-                lambda: self._emit_safe(self.request_region),
-                suppress=True,
-            )
-        except Exception:
+        if self._remove_region_hook is not None:
             try:
-                keyboard.add_hotkey(
-                    region_key,
-                    lambda: self._emit_safe(self.request_region),
-                )
+                self._remove_region_hook()
             except Exception:
                 pass
+            self._remove_region_hook = None
+        try:
+            def _region_hook(event):
+                if event.event_type == keyboard.KEY_DOWN:
+                    self._emit_safe(self.request_region)
+                return False  # suppress: luôn chặn PrtScn xuống OS
+            self._remove_region_hook = keyboard.hook_key(region_key, _region_hook, suppress=True)
+        except Exception:
+            try:
+                def _region_hook_fallback(event):
+                    if event.event_type == keyboard.KEY_DOWN:
+                        self._emit_safe(self.request_region)
+                self._remove_region_hook = keyboard.hook_key(region_key, _region_hook_fallback)
+            except Exception:
+                self._remove_region_hook = None
 
         try:
             keyboard.add_hotkey(
@@ -868,9 +879,18 @@ class AppController(QObject):
 
         Lưu ý: ``remove_all_hotkeys()`` + ``add_hotkey()`` KHÔNG tái cài WH_KEYBOARD_LL
         OS hook — chỉ thao tác ``_listener.blocking_hotkeys``/``nonblocking_hotkeys``.
+        remove_all_hotkeys() KHÔNG xoá blocking_keys (dùng bởi hook_key) → phải gỡ
+        _remove_region_hook riêng trước; install_global_hotkeys() sẽ gỡ lại khi tái đăng ký.
         """
         try:
             import keyboard
+            # Gỡ hook_key PrtScn trước (remove_all_hotkeys không làm điều này).
+            if self._remove_region_hook is not None:
+                try:
+                    self._remove_region_hook()
+                except Exception:
+                    pass
+                self._remove_region_hook = None
             keyboard.remove_all_hotkeys()
         except Exception:
             pass
