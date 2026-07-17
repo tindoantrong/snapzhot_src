@@ -1,10 +1,13 @@
-"""test_hotkey_recovery.py — kiểm chứng cơ chế khôi phục hotkey v3 (headless).
+"""test_hotkey_recovery.py — kiểm chứng cơ chế khôi phục hotkey (headless).
 
 Không cần nhấn phím thật / QApplication. Test trực tiếp keyboard._listener internals.
 Logic trong các hàm helper mirror đúng logic AppController:
   _restart_proc()   ↔  AppController._restart_processing_thread()
-  _restart_listen() ↔  AppController._hard_restart_keyboard_listener()
   _emit_safe_impl() ↔  AppController._emit_safe()
+
+Ghi chú: CA2 và CA3-3b (test _restart_listen / listening_thread recovery) đã
+chuyển sang SKIP — cơ chế hard-restart listening_thread (_hard_restart_keyboard_listener,
+HK4) đã bị bỏ khỏi AppController theo quyết định USER 2026-07-17.
 
 Exit code 0 = tất cả PASS, exit code 1 = có FAIL.
 """
@@ -65,10 +68,11 @@ def _restart_proc(lst) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
-# Helper: mirror AppController._hard_restart_keyboard_listener (không QUIT)
+# Helper: _restart_listen — HK4 ĐÃ GỠ, chỉ giữ lại để CA2/CA3-3b tham chiếu
+# (không còn mirror AppController vì _hard_restart_keyboard_listener đã xóa)
 # ---------------------------------------------------------------------------
 def _restart_listen(lst) -> tuple[bool, str]:
-    """Guard + start new listening_thread (gọi khi old đã chết)."""
+    """Guard + start new listening_thread (cơ chế HK4, không còn trong AppController)."""
     old = getattr(lst, "listening_thread", None)
     if old is not None and old.is_alive():
         return False, "ABORT: old listening_thread còn sống"
@@ -196,39 +200,11 @@ else:
           f"1.5  handler được gọi sau restart (counter {counter_before}→{counter})")
 
 # ===========================================================================
-# CA 2: listening_thread chết → khôi phục
+# CA 2: listening_thread recovery — SKIP (HK4 đã gỡ khỏi AppController)
 # ===========================================================================
-print("\n=== CA 2: listening_thread chết → khôi phục ===")
-
-_lt_now = getattr(lst, "listening_thread", None)
-if _lt_now is None or not _lt_now.is_alive():
-    skip("CA2 bỏ qua: listening_thread không sống (thiếu quyền SetWindowsHookEx?)")
-else:
-    orig_listen = lst.listening_thread
-    check(orig_listen.is_alive(), "2.0  listening_thread đang sống trước khi kill")
-
-    native = getattr(orig_listen, "native_id", None)
-    if native is None:
-        skip("CA2 bỏ qua: native_id không có (Python < 3.8?)")
-    else:
-        # Kill qua WM_QUIT → GetMessage loop trong listen() thoát → thread kết thúc
-        WM_QUIT = 0x0012
-        ctypes.windll.user32.PostThreadMessageW(native, WM_QUIT, 0, 0)
-        orig_listen.join(timeout=2.0)
-
-        check(not orig_listen.is_alive(),
-              "2.1  listening_thread đã chết sau WM_QUIT + join(2s)")
-
-        # Khôi phục
-        ok2, info2 = _restart_listen(lst)
-        check(ok2, f"2.2  _restart_listen trả True ({info2})")
-        time.sleep(0.5)
-
-        new_listen = lst.listening_thread
-        check(new_listen is not orig_listen,
-              "2.3  listening_thread là object mới")
-        check(new_listen is not None and new_listen.is_alive(),
-              "2.4  listening_thread mới đang sống")
+print("\n=== CA 2: listening_thread recovery [SKIP — HK4 removed] ===")
+skip("2.0  listening_thread chết → khôi phục [HK4 (_hard_restart_keyboard_listener) đã bỏ]")
+skip("2.1-2.4  [HK4 removed — listening_thread restart không còn trong AppController]")
 
 # ===========================================================================
 # CA 3: Guard chống thread trùng
@@ -247,17 +223,8 @@ else:
     check(lst.processing_thread is thread_ref_before,
           "3a  processing_thread KHÔNG bị thay thế")
 
-# 3b: listening_thread còn sống → _restart_listen phải abort
-_lt_now = lst.listening_thread
-if _lt_now is None or not _lt_now.is_alive():
-    skip("3b bỏ qua: listening_thread không sống hiện tại")
-else:
-    thread_ref_before_l = lst.listening_thread
-    ok3b, info3b = _restart_listen(lst)
-    check(not ok3b,
-          f"3b  guard abort khi listening_thread còn sống (ok={ok3b}, '{info3b}')")
-    check(lst.listening_thread is thread_ref_before_l,
-          "3b  listening_thread KHÔNG bị thay thế")
+# 3b: listening_thread guard — SKIP (HK4 đã gỡ, _restart_listen không còn dùng trong app)
+skip("3b  guard abort listening_thread [HK4 removed — _restart_listen không còn trong AppController]")
 
 # ===========================================================================
 # CA 4: _emit_safe nuốt exception, không propagate
@@ -286,11 +253,12 @@ _emit_safe_impl(_GoodSignal())
 check(_GoodSignal.called, "4.2  _emit_safe gọi emit() trên signal bình thường")
 
 # ===========================================================================
-# CA 5: [HK3] stuck modifier clear — mirror exact logic từ
-#        AppController._hard_restart_keyboard_listener (sau old.join())
-#        Không cần OS hook thật, không cần bàn phím vật lý.
+# CA 5: stuck modifier clear algorithm — headless, standalone.
+#        Logic này từng nằm trong _hard_restart_keyboard_listener (HK3-FIX);
+#        HK4 đã gỡ nhưng thuật toán clear vẫn hợp lệ và được test riêng qua
+#        _hk3_clear_stuck_modifiers. Không cần OS hook thật, không cần bàn phím.
 # ===========================================================================
-print("\n=== CA 5: HK3 stuck modifier clear (headless) ===")
+print("\n=== CA 5: stuck modifier clear algorithm (headless) ===")
 
 
 class _FakeKeyEvent:
@@ -306,7 +274,7 @@ class _FakeKeyEvent:
 
 
 def _hk3_clear_stuck_modifiers(kb_mod, lst_mod) -> list[int]:
-    """Mirror EXACT code path của HK3-FIX trong _hard_restart_keyboard_listener.
+    """Thuật toán clear stuck-modifier (trích từ HK3-FIX, standalone).
 
     Tách thành hàm để test gọi trực tiếp mà không cần restart OS hook.
     Trả về danh sách scan_code đã xóa (để assert).
