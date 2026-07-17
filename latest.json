@@ -1,5 +1,5 @@
 {
-  "version": "0.1.8",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.8.exe",
-  "notes": "Gỡ hẳn cơ chế hard-restart listening_thread (HK4) — watchdog giờ chỉ khôi phục processing_thread; gỡ phím tắt Ctrl+Shift+F (tính năng chụp toàn màn hình vẫn dùng qua tray và Library)."
+  "version": "0.1.9",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.9.exe",
+  "notes": "Vá lỗi Right Ctrl kẹt sau khi nhấn PrtScn — PrtScn nay dùng hook_key thay add_hotkey, tắt modifier state machine của keyboard lib; giữ nguyên PrtScn im lặng và Ctrl+Shift+R."
 }
