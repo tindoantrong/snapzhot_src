@@ -1,5 +1,5 @@
 {
-  "version": "0.1.10",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.10.exe",
-  "notes": "Auto-ship fix: issue #1"
+  "version": "0.1.11",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.11.exe",
+  "notes": "Sửa lỗi kẹt chế độ chụp màn hình khi mở hộp thoại đổi phím tắt — giờ phím tắt cũ tạm tắt khi dialog đang mở, không còn bị kích hoạt nhầm. Hiển thị \"Win\" thay vì \"Meta\" trong hộp thoại cài đặt phím tắt cho dễ hiểu."
 }

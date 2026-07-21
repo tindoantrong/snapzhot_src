@@ -574,16 +574,34 @@ class AppController(QObject):
         from .common.settings_dialog import HotkeyDialog
 
         current = self.config.get("hotkey_region", "print screen")
+
+        # Tạm gỡ MỌI hotkey toàn cục — tránh nhấn tổ hợp phím cũ khi dialog mở
+        # kích hoạt chế độ chụp/quay (kẹt không thoát được, issue #1).
+        try:
+            import keyboard
+            if self._remove_region_hook is not None:
+                try:
+                    self._remove_region_hook()
+                except Exception:
+                    pass
+                self._remove_region_hook = None
+            keyboard.remove_all_hotkeys()
+        except Exception:
+            pass
+
         dlg = HotkeyDialog(current)
-        if dlg.exec() != QDialog.Accepted:
-            return
-        new = dlg.value()
-        if not new or new == current:
-            return
-        self.config["hotkey_region"] = new
-        save_config(self.config)
+        accepted = dlg.exec() == QDialog.Accepted
+        new = dlg.value() if accepted else ""
+
+        if accepted and new and new != current:
+            self.config["hotkey_region"] = new
+            save_config(self.config)
+
+        # Luôn đăng ký lại hotkey (dù OK hay Cancel).
         self.reload_global_hotkeys()
-        self.tray.showMessage(APP_NAME, f"Đã đặt phím chụp vùng: {new}")
+
+        if accepted and new and new != current:
+            self.tray.showMessage(APP_NAME, f"Đã đặt phím chụp vùng: {new}")
 
     def _on_startup_toggled(self, checked: bool) -> None:
         if not autostart.set_enabled(checked):

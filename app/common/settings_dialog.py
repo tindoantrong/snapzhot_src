@@ -11,12 +11,14 @@ Hai hàm dưới đây map qua lại, chú ý ca lệch phím Print:
 """
 from __future__ import annotations
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QKeySequenceEdit,
     QLabel,
+    QLineEdit,
     QPushButton,
     QVBoxLayout,
 )
@@ -105,6 +107,7 @@ class HotkeyDialog(QDialog):
             self._edit.setMaximumSequenceLength(1)
         except Exception:
             pass
+        self._edit.keySequenceChanged.connect(self._fix_meta_display)
         if current:
             self._edit.setKeySequence(keyboard_to_qkeyseq(current))
         layout.addWidget(self._edit)
@@ -123,6 +126,17 @@ class HotkeyDialog(QDialog):
     def _reset_default(self) -> None:
         """Đặt lại về phím mặc định PrtSc."""
         self._edit.setKeySequence(keyboard_to_qkeyseq("print screen"))
+
+    def _fix_meta_display(self) -> None:
+        """Thay 'Meta' → 'Win' trong ô hiển thị (Windows dùng phím Win, không gọi Meta)."""
+        QTimer.singleShot(0, self._apply_win_label)
+
+    def _apply_win_label(self) -> None:
+        le = self._edit.findChild(QLineEdit)
+        if le:
+            t = le.text()
+            if "Meta" in t:
+                le.setText(t.replace("Meta", "Win"))
 
     def value(self) -> str:
         """Chuỗi phím theo định dạng thư viện `keyboard` (rỗng nếu chưa nhập)."""
