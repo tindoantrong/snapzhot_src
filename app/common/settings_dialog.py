@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QKeySequenceEdit,
     QLabel,
+    QPushButton,
     QVBoxLayout,
 )
 
@@ -108,12 +109,20 @@ class HotkeyDialog(QDialog):
             self._edit.setKeySequence(keyboard_to_qkeyseq(current))
         layout.addWidget(self._edit)
 
+        default_btn = QPushButton("Mặc định (PrtSc)", self)
+        default_btn.clicked.connect(self._reset_default)
+        layout.addWidget(default_btn)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _reset_default(self) -> None:
+        """Đặt lại về phím mặc định PrtSc."""
+        self._edit.setKeySequence(keyboard_to_qkeyseq("print screen"))
 
     def value(self) -> str:
         """Chuỗi phím theo định dạng thư viện `keyboard` (rỗng nếu chưa nhập)."""

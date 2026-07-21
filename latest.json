@@ -1,5 +1,5 @@
 {
-  "version": "0.1.9",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.9.exe",
-  "notes": "Vá lỗi Right Ctrl kẹt sau khi nhấn PrtScn — PrtScn nay dùng hook_key thay add_hotkey, tắt modifier state machine của keyboard lib; giữ nguyên PrtScn im lặng và Ctrl+Shift+R."
+  "version": "0.1.10",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.10.exe",
+  "notes": "Auto-ship fix: issue #1"
 }
