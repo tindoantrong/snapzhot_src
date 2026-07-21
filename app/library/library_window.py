@@ -179,7 +179,7 @@ class LibraryWindow(QMainWindow):
             ("Mở trong Editor", self._open_selected),
             ("Sửa tag", self._edit_tags),
             ("Xoá", self._delete_selected),
-            ("Xoá tất cả", self._delete_all),
+            ("Xoá toàn bộ", self._delete_all),
         ):
             b = QPushButton(text)
             b.clicked.connect(slot)
@@ -362,7 +362,7 @@ class LibraryWindow(QMainWindow):
         ids = [self.list.item(i).data(Qt.UserRole) for i in range(self.list.count())]
         if not ids:
             return
-        if QMessageBox.question(self, "Xoá tất cả",
+        if QMessageBox.question(self, "Xoá toàn bộ",
                                 f"Xoá toàn bộ {len(ids)} mục đang hiển thị khỏi thư viện?",
                                 QMessageBox.Yes | QMessageBox.No,
                                 QMessageBox.No) == QMessageBox.Yes:
