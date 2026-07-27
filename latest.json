@@ -1,5 +1,5 @@
 {
-  "version": "0.1.12",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.12.exe",
-  "notes": "Đổi nhãn nút 'Xoá tất cả' thành 'Xoá toàn bộ' trong màn hình Thư viện cho rõ nghĩa hơn."
+  "version": "0.1.13",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.13.exe",
+  "notes": "Thêm chức năng dán ảnh (Ctrl+V) ở màn hình editor. Nếu chưa có ảnh, ảnh dán sẽ được mở làm ảnh chính; nếu đã có ảnh, ảnh dán sẽ được chèn lên canvas như một lớp phủ có thể di chuyển, thay đổi kích thước và xoá được. Nút \"Dán ảnh\" cũng được thêm vào thanh công cụ phía dưới."
 }

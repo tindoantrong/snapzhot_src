@@ -1129,6 +1129,31 @@ class Canvas(QGraphicsView):
         self._start = None
         self._temp_item = None
 
+    def paste_image(self, image: QImage) -> None:
+        """Dán ảnh từ clipboard lên canvas.
+
+        Nếu chưa có ảnh nền → load làm ảnh chính.
+        Nếu đã có ảnh nền → chèn làm annotation overlay (chọn/di chuyển/resize được).
+        """
+        if image.isNull():
+            return
+        if not self.has_image():
+            self.load_image(image)
+            return
+        pix_item = QGraphicsPixmapItem(QPixmap.fromImage(image))
+        pix_item.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        pix_item.setFlag(QGraphicsItem.ItemIsMovable, True)
+        # Đặt ảnh dán vào giữa vùng nhìn thấy.
+        vp_center = self.mapToScene(self.viewport().rect().center())
+        pix_item.setPos(
+            vp_center.x() - image.width() / 2,
+            vp_center.y() - image.height() / 2,
+        )
+        self.undo_stack.push(AddItemCommand(self._scene, pix_item, "Dán ảnh"))
+        # Chọn item vừa dán để người dùng thấy handle và di chuyển ngay.
+        self._scene.clearSelection()
+        pix_item.setSelected(True)
+
     def _add_stamp(self, pos: QPointF) -> None:
         size = 48.0
         item = StampItem(self.state.stamp_name, self.state.color, size)

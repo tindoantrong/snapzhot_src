@@ -405,6 +405,22 @@ def _draw_search(painter: QPainter, rect: QRectF, color: QColor) -> None:
     painter.drawLine(edge, _p(rect, 1.0, 1.0))
 
 
+def _draw_paste(painter: QPainter, rect: QRectF, color: QColor) -> None:
+    # Clipboard: bảng kẹp có kẹp trên + tờ giấy bên trong.
+    # Kẹp trên (hình chữ U ngược).
+    painter.drawArc(
+        QRectF(_p(rect, 0.30, -0.02), _p(rect, 0.70, 0.22)),
+        0, 180 * 16,
+    )
+    # Thân bảng kẹp (hình chữ nhật bo góc nhẹ).
+    board = QRectF(_p(rect, 0.10, 0.12), _p(rect, 0.90, 1.0))
+    painter.drawRoundedRect(board, 3, 3)
+    # Các dòng nội dung (gợi ý ảnh/text).
+    painter.drawLine(_p(rect, 0.24, 0.40), _p(rect, 0.76, 0.40))
+    painter.drawLine(_p(rect, 0.24, 0.56), _p(rect, 0.76, 0.56))
+    painter.drawLine(_p(rect, 0.24, 0.72), _p(rect, 0.56, 0.72))
+
+
 _DRAWERS = {
     "select": _draw_select,
     "arrow": _draw_arrow,
@@ -433,4 +449,5 @@ _DRAWERS = {
     "spotlight": _draw_spotlight,
     "callout": _draw_callout,
     "search": _draw_search,
+    "paste": _draw_paste,
 }

@@ -685,6 +685,7 @@ class EditorWindow(QMainWindow):
             ("Xuất ra file...", "export", self._export_file, "Ctrl+E", "Xuất ảnh ra file"),
             # Copy nhận cả Ctrl+C lẫn Ctrl+Shift+C cho tiện tay.
             ("Copy", "copy", self._copy_clipboard, ("Ctrl+C", "Ctrl+Shift+C"), "Copy ảnh vào clipboard"),
+            ("Dán ảnh", "paste", self._paste_clipboard, "Ctrl+V", "Dán ảnh từ clipboard"),
         ):
             keys = [shortcut] if isinstance(shortcut, str) else list(shortcut)
             act = QAction(text, self)
@@ -1142,3 +1143,30 @@ class EditorWindow(QMainWindow):
             return
         QGuiApplication.clipboard().setImage(self.canvas.render_to_image())
         self._show_toast("Đã copy vào clipboard")
+
+    def _paste_clipboard(self) -> None:
+        """Dán ảnh từ clipboard vào editor.
+
+        Chưa có ảnh → load làm ảnh chính. Đã có ảnh → chèn overlay di chuyển được.
+        """
+        clipboard = QGuiApplication.clipboard()
+        image = clipboard.image()
+        if image.isNull():
+            mime = clipboard.mimeData()
+            if mime and mime.hasUrls():
+                for url in mime.urls():
+                    if url.isLocalFile():
+                        image = QImage(url.toLocalFile())
+                        if not image.isNull():
+                            break
+        if image.isNull():
+            self._show_toast("Clipboard không có ảnh")
+            return
+        had_image = self.canvas.has_image()
+        self.canvas.paste_image(image)
+        if not had_image:
+            self._update_image_size_status()
+            self._refresh_empty_state()
+            self._show_toast("Đã dán ảnh từ clipboard")
+        else:
+            self._show_toast("Đã dán ảnh lên canvas")
