@@ -1,5 +1,5 @@
 {
-  "version": "0.1.14",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.14.exe",
-  "notes": "Sửa lỗi mũi tên bị méo khi kéo thay đổi kích thước; giờ mũi tên giữ đúng hình dạng đầu nhọn khi resize, có thể kéo xoay hướng tự do mà không bị biến dạng."
+  "version": "0.1.15",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.15.exe",
+  "notes": "Thêm mục \"Góp ý / Báo lỗi…\" vào menu khay hệ thống, giúp bạn dễ dàng gửi phản hồi hoặc báo lỗi trực tiếp trên GitHub."
 }
