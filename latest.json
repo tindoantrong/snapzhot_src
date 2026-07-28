@@ -1,5 +1,5 @@
 {
-  "version": "0.1.15",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.15.exe",
-  "notes": "Thêm mục \"Góp ý / Báo lỗi…\" vào menu khay hệ thống, giúp bạn dễ dàng gửi phản hồi hoặc báo lỗi trực tiếp trên GitHub."
+  "version": "0.1.16",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.16.exe",
+  "notes": "Nâng cấp chức năng cập nhật: app giờ tự tải bản cài đặt mới (hiển thị thanh tiến trình) và tự động chạy trình cài đặt khi tải xong, không cần mở trình duyệt. Có checkbox \"Tải xong tự động cài đặt\" (mặc định bật) — bỏ tick nếu muốn tự chọn lúc cài."
 }

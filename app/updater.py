@@ -10,11 +10,14 @@ Mọi lỗi mạng/parse/timeout đều được nuốt và trả về UpdateInf
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from typing import Callable
 
 # Nguồn cập nhật: file latest.json đính kèm trong Release mới nhất của repo.
 # Link "releases/latest/download/<file>" luôn trỏ tới release mới nhất.
@@ -167,3 +170,60 @@ def check_for_updates(
         notes=notes,
         error=None,
     )
+
+
+def download_update(
+    url: str,
+    progress_cb: Callable[[int, int], None] | None = None,
+    timeout: float = 30.0,
+) -> str:
+    """Tải file cập nhật về thư mục tạm, trả về đường dẫn file đã tải.
+
+    Parameters
+    ----------
+    url:
+        URL tải về (phải qua ``is_safe_update_url`` trước khi gọi).
+    progress_cb:
+        Hàm ``(bytes_downloaded, total_bytes)`` được gọi mỗi chunk.
+        ``total_bytes`` = -1 nếu server không trả Content-Length.
+    timeout:
+        Timeout kết nối (giây).
+
+    Returns
+    -------
+    str: Đường dẫn tuyệt đối tới file đã tải (trong %TEMP%).
+
+    Raises
+    ------
+    ValueError: URL không an toàn.
+    urllib.error.URLError: Lỗi mạng.
+    OSError: Lỗi ghi file.
+    """
+    if not is_safe_update_url(url):
+        raise ValueError("URL cập nhật không hợp lệ hoặc không an toàn.")
+
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    resp = urllib.request.urlopen(req, timeout=timeout)
+
+    total = int(resp.headers.get("Content-Length", -1))
+
+    # Lấy tên file từ URL (phần cuối path).
+    parsed = urllib.parse.urlparse(url)
+    filename = os.path.basename(parsed.path) or "SnagTin-Setup.exe"
+
+    dest = os.path.join(tempfile.gettempdir(), filename)
+
+    chunk_size = 64 * 1024  # 64 KB
+    downloaded = 0
+    with open(dest, "wb") as f:
+        while True:
+            chunk = resp.read(chunk_size)
+            if not chunk:
+                break
+            f.write(chunk)
+            downloaded += len(chunk)
+            if progress_cb is not None:
+                progress_cb(downloaded, total)
+
+    resp.close()
+    return dest
