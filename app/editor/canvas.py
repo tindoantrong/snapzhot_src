@@ -969,7 +969,7 @@ class Canvas(QGraphicsView):
         painter.end()
         return image
 
-    def _on_focus_changed(self, old_item, _new_item) -> None:
+    def _on_focus_changed(self, _new_item, old_item, *_args) -> None:
         """Xoá text/callout rỗng khi mất focus (Escape, click chỗ khác…)."""
         if (isinstance(old_item, _PlaceholderMixin)
                 and old_item._is_empty()

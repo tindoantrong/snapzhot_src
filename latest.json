@@ -1,5 +1,5 @@
 {
-  "version": "0.1.18",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.18.exe",
-  "notes": "Sửa lỗi thông báo cập nhật không hiện trên Windows; giờ thông báo sẽ xuất hiện đúng cách khi có bản mới. Ngoài ra, app sẽ tự kiểm tra cập nhật mỗi 4 giờ thay vì chỉ 1 lần khi khởi động, giúp bạn không bỏ lỡ bản cập nhật mới."
+  "version": "0.1.19",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.19.exe",
+  "notes": "Sửa lỗi không thêm được chữ vào ảnh trong Editor; chữ mới tạo bị xoá ngay lập tức do nhầm thứ tự tham số trong xử lý focus."
 }
