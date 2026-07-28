@@ -412,6 +412,8 @@ class AppController(QObject):
         self.editor.delete_capture_requested.connect(self._on_delete_capture)
         # Nút "Về thư viện" trong Editor → hiện màn hình thư viện.
         self.editor.request_library.connect(self.show_library)
+        # OCR ảnh bằng Claude CLI.
+        self.editor.request_ocr.connect(self._run_ocr)
 
         self.library_window = LibraryWindow(self.library)
         self.library_window.open_in_editor.connect(self._open_capture_in_editor)
@@ -460,6 +462,10 @@ class AppController(QObject):
         self._update_dialog: _UpdateDialog | None = None
         self._update_thread: QThread | None = None
         self._update_worker: _UpdateCheckWorker | None = None
+
+        # OCR: luồng nền (giữ ref tránh GC).
+        self._ocr_thread: QThread | None = None
+        self._ocr_worker = None
 
         self._build_tray()
 
@@ -1319,12 +1325,57 @@ class AppController(QObject):
         _log.info("[hotkey] %s", msg)
         self.tray.showMessage(APP_NAME, msg, msecs=3000)
 
+    # ---------- OCR ----------
+    @Slot(QImage)
+    def _run_ocr(self, image: QImage) -> None:
+        """Chạy OCR ở luồng nền, kết quả copy vào clipboard."""
+        if self._ocr_thread is not None:
+            self.tray.showMessage(APP_NAME, "Đang xử lý OCR, vui lòng chờ…")
+            return
+        from .ocr import OcrWorker
+
+        self.editor._show_toast("Đang nhận diện văn bản…")
+        thread = QThread(self)
+        worker = OcrWorker(image)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_ocr_finished)
+        worker.error.connect(self._on_ocr_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_ocr_thread)
+        self._ocr_thread = thread
+        self._ocr_worker = worker
+        thread.start()
+
+    @Slot(str)
+    def _on_ocr_finished(self, text: str) -> None:
+        if not text:
+            self.editor._show_toast("Không tìm thấy văn bản trong ảnh")
+            return
+        QGuiApplication.clipboard().setText(text)
+        self.editor._show_toast("Đã copy văn bản vào clipboard")
+
+    @Slot(str)
+    def _on_ocr_error(self, message: str) -> None:
+        self.editor._show_toast(f"OCR lỗi: {message}")
+
+    def _clear_ocr_thread(self) -> None:
+        self._ocr_thread = None
+        self._ocr_worker = None
+
     def shutdown(self) -> None:
         if self._hotkey_watchdog is not None:
             self._hotkey_watchdog.stop()
         if self._update_thread is not None:
             self._update_thread.quit()
             self._update_thread.wait(2000)
+        if self._ocr_thread is not None:
+            self._ocr_thread.quit()
+            self._ocr_thread.wait(2000)
         if self._audio_recorder is not None:
             try:
                 self._audio_recorder.stop()

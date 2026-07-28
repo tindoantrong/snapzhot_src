@@ -1,5 +1,5 @@
 {
-  "version": "0.1.19",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.19.exe",
-  "notes": "Sửa lỗi không thêm được chữ vào ảnh trong Editor; chữ mới tạo bị xoá ngay lập tức do nhầm thứ tự tham số trong xử lý focus."
+  "version": "0.1.20",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.20.exe",
+  "notes": "Thêm chức năng OCR: nếu máy đã cài Claude CLI, nút \"OCR ảnh\" (Ctrl+Shift+O) xuất hiện trong Editor, nhận diện và trích xuất văn bản từ ảnh rồi tự động copy vào clipboard."
 }

@@ -269,6 +269,8 @@ class EditorWindow(QMainWindow):
     delete_capture_requested = Signal(int)
     # Phát khi người dùng muốn quay về thư viện.
     request_library = Signal()
+    # Phát QImage khi người dùng yêu cầu OCR (ảnh toàn bộ hoặc vùng chọn).
+    request_ocr = Signal(QImage)
 
     def __init__(self) -> None:
         super().__init__()
@@ -694,6 +696,17 @@ class EditorWindow(QMainWindow):
             act.setToolTip(f"{tip} ({' / '.join(keys)})")
             act.triggered.connect(slot)
             tb.addAction(act)
+
+        # OCR — chỉ hiện nút nếu máy có claude CLI.
+        from ..ocr import claude_cli_available
+        if claude_cli_available():
+            tb.addSeparator()
+            act_ocr = QAction("OCR ảnh", self)
+            act_ocr.setIcon(tool_icon("ocr"))
+            act_ocr.setShortcut(QKeySequence("Ctrl+Shift+O"))
+            act_ocr.setToolTip("Trích xuất văn bản từ ảnh (Ctrl+Shift+O)")
+            act_ocr.triggered.connect(self._ocr_full_image)
+            tb.addAction(act_ocr)
 
     # ---------- dải ảnh gần đây (filmstrip) ----------
     def _build_recent_dock(self) -> None:
@@ -1163,6 +1176,13 @@ class EditorWindow(QMainWindow):
             return
         QGuiApplication.clipboard().setImage(self.canvas.render_to_image())
         self._show_toast("Đã copy vào clipboard")
+
+    def _ocr_full_image(self) -> None:
+        """Gửi toàn bộ ảnh hiện tại để OCR."""
+        if not self.canvas.has_image():
+            self._show_toast("Chưa có ảnh để OCR")
+            return
+        self.request_ocr.emit(self.canvas.render_to_image())
 
     def _paste_clipboard(self) -> None:
         """Dán ảnh từ clipboard vào editor.

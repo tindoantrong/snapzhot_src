@@ -421,6 +421,17 @@ def _draw_paste(painter: QPainter, rect: QRectF, color: QColor) -> None:
     painter.drawLine(_p(rect, 0.24, 0.72), _p(rect, 0.56, 0.72))
 
 
+def _draw_ocr(painter: QPainter, rect: QRectF, color: QColor) -> None:
+    """Icon OCR: chữ 'T' trong khung kính lúp — gợi ý đọc chữ từ ảnh."""
+    # Kính lúp (vòng tròn + tay cầm).
+    cx, cy, r = rect.center().x() - rect.width() * 0.08, rect.center().y() - rect.height() * 0.08, rect.width() * 0.32
+    painter.drawEllipse(QPointF(cx, cy), r, r)
+    painter.drawLine(_p(rect, 0.72, 0.72), _p(rect, 0.95, 0.95))
+    # Chữ "T" bên trong kính.
+    painter.drawLine(_p(rect, 0.20, 0.24), _p(rect, 0.56, 0.24))
+    painter.drawLine(_p(rect, 0.38, 0.24), _p(rect, 0.38, 0.58))
+
+
 _DRAWERS = {
     "select": _draw_select,
     "arrow": _draw_arrow,
@@ -450,4 +461,5 @@ _DRAWERS = {
     "callout": _draw_callout,
     "search": _draw_search,
     "paste": _draw_paste,
+    "ocr": _draw_ocr,
 }
