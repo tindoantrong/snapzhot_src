@@ -468,7 +468,7 @@ class AppController(QObject):
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
 
-        # Tự kiểm tra cập nhật 30s sau khi khởi động (không làm chậm startup).
+        # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 4 giờ.
         self._auto_check_done = False
         QTimer.singleShot(30_000, self._auto_check_for_updates)
 
@@ -607,10 +607,14 @@ class AppController(QObject):
     def _on_update_dialog_finished(self, _result: int) -> None:
         self._update_dialog = None
 
-    # ---------- tự kiểm tra cập nhật khi khởi động ----------
+    # ---------- tự kiểm tra cập nhật ----------
+    _AUTO_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000  # 4 giờ
+
     def _auto_check_for_updates(self) -> None:
-        """Chạy kiểm tra cập nhật tự động 1 lần sau khi khởi động."""
-        if self._auto_check_done or self._update_thread is not None:
+        """Kiểm tra cập nhật nền: lần đầu 30s sau khởi động, lặp mỗi 4 giờ."""
+        if self._update_thread is not None:
+            # Đang có 1 lần kiểm tra chạy → thử lại sau 1 phút.
+            QTimer.singleShot(60_000, self._auto_check_for_updates)
             return
         self._auto_check_done = True
         url = self.config.get("update_manifest_url", updater.UPDATE_MANIFEST_URL)
@@ -630,13 +634,15 @@ class AppController(QObject):
     @Slot(object)
     def _on_auto_check_result(self, info) -> None:
         """Nhận kết quả auto-check: hiển thị tray notification nếu có bản mới."""
+        # Lên lịch kiểm tra lại sau 4 giờ (bất kể kết quả).
+        QTimer.singleShot(self._AUTO_CHECK_INTERVAL_MS, self._auto_check_for_updates)
         if not info.available:
             return
         self.tray.showMessage(
             f"{APP_NAME} — Có bản cập nhật mới!",
             f"Phiên bản {info.latest} đã sẵn sàng (bạn đang dùng {info.current}).\n"
             "Nhấn vào đây để cập nhật.",
-            app_icon(),
+            QSystemTrayIcon.Information,
             10_000,  # hiển thị 10 giây
         )
 
