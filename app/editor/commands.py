@@ -8,7 +8,7 @@ nên các command được viết sao cho redo() lần đầu trùng với trạ
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap, QTransform, QUndoCommand
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap, QTransform, QUndoCommand
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItem,
@@ -89,7 +89,7 @@ class ResizeItemCommand(QUndoCommand):
     """Đổi kích thước (scale) một item bằng cách thay QTransform cục bộ.
 
     Resize được hiện thực qua transform chứ không sửa hình học gốc của item,
-    nên áp dụng đồng nhất cho mọi loại item (rect, ellipse, arrow, text, step…).
+    nên áp dụng đồng nhất cho mọi loại item (rect, ellipse, text, step…).
     pos() giữ nguyên; undo/redo chỉ cần đặt lại transform.
     """
 
@@ -105,6 +105,34 @@ class ResizeItemCommand(QUndoCommand):
 
     def undo(self) -> None:
         self._item.setTransform(self._old)
+
+
+class ResizeArrowCommand(QUndoCommand):
+    """Đổi kích thước mũi tên bằng cách dựng lại hình từ start/end mới.
+
+    Khác ResizeItemCommand: thay vì áp scale transform (gây méo arrowhead),
+    lưu old/new start+end rồi gọi set_points() để rebuild polygon giữ đúng
+    tỉ lệ đầu mũi tên.
+    """
+
+    def __init__(self, item, old_start: QPointF, old_end: QPointF,
+                 new_start: QPointF, new_end: QPointF,
+                 old_transform: QTransform) -> None:
+        super().__init__("Đổi kích thước mũi tên")
+        self._item = item
+        self._old_start = QPointF(old_start)
+        self._old_end = QPointF(old_end)
+        self._new_start = QPointF(new_start)
+        self._new_end = QPointF(new_end)
+        self._old_transform = QTransform(old_transform)
+
+    def redo(self) -> None:
+        self._item.setTransform(QTransform())
+        self._item.set_points(self._new_start, self._new_end)
+
+    def undo(self) -> None:
+        self._item.set_points(self._old_start, self._old_end)
+        self._item.setTransform(self._old_transform)
 
 
 def _apply_style_snapshot(item: QGraphicsItem, snap: dict) -> None:

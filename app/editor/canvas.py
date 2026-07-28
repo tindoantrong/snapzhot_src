@@ -49,6 +49,7 @@ from .commands import (
     CropCommand,
     DeleteItemsCommand,
     MoveItemCommand,
+    ResizeArrowCommand,
     ResizeItemCommand,
     StyleCommand,
     _make_shadow_effect,
@@ -1339,6 +1340,10 @@ class Canvas(QGraphicsView):
         self._active_handle = index
         self._resize_origin_rect = item.sceneBoundingRect()
         self._resize_old_transform = QTransform(item.transform())
+        # ArrowItem: lưu start/end gốc để resize bằng recompute thay vì scale.
+        if isinstance(item, ArrowItem):
+            self._arrow_old_start = QPointF(item._start)
+            self._arrow_old_end = QPointF(item._end)
 
     def _resize_to(self, cursor_scene: QPointF, keep_aspect: bool = False,
                    from_center: bool = False) -> None:
@@ -1351,13 +1356,37 @@ class Canvas(QGraphicsView):
             self._active_handle, self._resize_origin_rect, cursor_scene,
             keep_aspect=keep_aspect, from_center=from_center,
         )
-        new_t = transform_for_resize(
-            self._resize_old_transform, self._resize_item.pos(),
-            self._resize_origin_rect, new_rect,
-        )
-        self._resize_item.setTransform(new_t)
+        if isinstance(self._resize_item, ArrowItem):
+            # Mũi tên: map start/end tỉ lệ old→new rect rồi rebuild polygon,
+            # tránh scale transform gây méo arrowhead.
+            self._resize_item.setTransform(QTransform())
+            old_r = self._resize_origin_rect
+            s, e = self._arrow_old_start, self._arrow_old_end
+            t = self._resize_old_transform
+            # Tính vị trí scene của start/end gốc (qua transform cũ).
+            s_scene = t.map(s)
+            e_scene = t.map(e)
+            ns = self._map_point_rect(s_scene, old_r, new_rect)
+            ne = self._map_point_rect(e_scene, old_r, new_rect)
+            self._resize_item.set_points(ns, ne)
+        else:
+            new_t = transform_for_resize(
+                self._resize_old_transform, self._resize_item.pos(),
+                self._resize_origin_rect, new_rect,
+            )
+            self._resize_item.setTransform(new_t)
         self._position_handles()
         self.resize_preview.emit(new_rect.width(), new_rect.height())
+
+    @staticmethod
+    def _map_point_rect(pt: QPointF, old_r: QRectF, new_r: QRectF) -> QPointF:
+        """Map điểm pt tỉ lệ từ old_r sang new_r."""
+        if old_r.width() == 0 or old_r.height() == 0:
+            return QPointF(pt)
+        fx = (pt.x() - old_r.left()) / old_r.width()
+        fy = (pt.y() - old_r.top()) / old_r.height()
+        return QPointF(new_r.left() + fx * new_r.width(),
+                       new_r.top() + fy * new_r.height())
 
     def _commit_resize(self) -> None:
         item = self._resize_item
@@ -1368,9 +1397,16 @@ class Canvas(QGraphicsView):
         self._resize_old_transform = None
         if item is None or old_t is None:
             return
-        new_t = item.transform()
-        if new_t != old_t:
-            self.undo_stack.push(ResizeItemCommand(item, old_t, new_t))
+        if isinstance(item, ArrowItem):
+            old_s, old_e = self._arrow_old_start, self._arrow_old_end
+            new_s, new_e = QPointF(item._start), QPointF(item._end)
+            if old_s != new_s or old_e != new_e or old_t != QTransform():
+                self.undo_stack.push(
+                    ResizeArrowCommand(item, old_s, old_e, new_s, new_e, old_t))
+        else:
+            new_t = item.transform()
+            if new_t != old_t:
+                self.undo_stack.push(ResizeItemCommand(item, old_t, new_t))
         self._position_handles()
         self.resize_finished.emit()
 
