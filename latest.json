@@ -1,5 +1,5 @@
 {
-  "version": "0.1.16",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.16.exe",
-  "notes": "Nâng cấp chức năng cập nhật: app giờ tự tải bản cài đặt mới (hiển thị thanh tiến trình) và tự động chạy trình cài đặt khi tải xong, không cần mở trình duyệt. Có checkbox \"Tải xong tự động cài đặt\" (mặc định bật) — bỏ tick nếu muốn tự chọn lúc cài."
+  "version": "0.1.17",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.17.exe",
+  "notes": "Sửa lỗi chữ \"Nhập chữ...\" và \"Nhập chú thích...\" hiển thị như nội dung thật thay vì placeholder trong editor. Giờ đây chữ gợi ý hiện mờ khi ô trống và tự biến mất khi bắt đầu gõ. Bổ sung: tự xoá ô chữ/callout rỗng khi click ra ngoài hoặc nhấn Escape; con trỏ chuột thay đổi theo công cụ đang chọn (crosshair khi vẽ, I-beam khi gõ chữ); hỗ trợ double-click để sửa lại chữ đã gõ."
 }

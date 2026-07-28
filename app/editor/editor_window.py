@@ -952,6 +952,23 @@ class EditorWindow(QMainWindow):
     def current_capture_id(self) -> int | None:
         return self._current_capture_id
 
+    # Con trỏ phù hợp theo từng công cụ (chuyên nghiệp hơn mũi tên mặc định).
+    _TOOL_CURSORS = {
+        Tool.SELECT: Qt.ArrowCursor,
+        Tool.ARROW: Qt.CrossCursor,
+        Tool.RECT: Qt.CrossCursor,
+        Tool.ELLIPSE: Qt.CrossCursor,
+        Tool.PEN: Qt.CrossCursor,
+        Tool.TEXT: Qt.IBeamCursor,
+        Tool.CALLOUT: Qt.CrossCursor,
+        Tool.HIGHLIGHT: Qt.CrossCursor,
+        Tool.BLUR: Qt.CrossCursor,
+        Tool.STEP: Qt.CrossCursor,
+        Tool.CROP: Qt.CrossCursor,
+        Tool.STAMP: Qt.CrossCursor,
+        Tool.SPOTLIGHT: Qt.CrossCursor,
+    }
+
     def _select_tool(self, tool: Tool) -> None:
         self.canvas.state.tool = tool
         if tool in self._tool_actions:
@@ -959,6 +976,9 @@ class EditorWindow(QMainWindow):
         self.status_hint.setText(TOOL_HINTS.get(tool, ""))
         self._refresh_props()
         self.canvas.refresh_handles()
+        self.canvas.viewport().setCursor(
+            self._TOOL_CURSORS.get(tool, Qt.ArrowCursor)
+        )
 
     def _on_resize_preview(self, w: float, h: float) -> None:
         self.status_hint.setText(f"Kích thước: {round(w)} × {round(h)} px")

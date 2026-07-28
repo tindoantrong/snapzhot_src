@@ -326,7 +326,70 @@ class ArrowItem(QGraphicsPolygonItem):
         self._rebuild()
 
 
-class CalloutItem(QGraphicsTextItem):
+class _PlaceholderMixin:
+    """Mixin thêm placeholder cho QGraphicsTextItem (và subclass).
+
+    Placeholder hiển thị màu xám nhạt khi document rỗng, biến mất khi gõ chữ,
+    hiện lại khi xoá hết. Không bao giờ nằm trong nội dung document thật nên
+    không bị render khi export ảnh.
+    """
+
+    _placeholder: str = ""
+
+    def _init_placeholder(self, placeholder: str) -> None:
+        self._placeholder = placeholder
+        self._placeholder_color = QColor("#999999")
+        self.document().contentsChanged.connect(self._on_contents_changed)
+
+    def _is_empty(self) -> bool:
+        return self.document().isEmpty()
+
+    def _on_contents_changed(self) -> None:
+        self.update()
+
+    def _paint_placeholder(self, painter: QPainter) -> None:
+        if not self._is_empty() or not self._placeholder:
+            return
+        margin = self.document().documentMargin()
+        painter.setPen(self._placeholder_color)
+        painter.setFont(self.font())
+        text_rect = self.boundingRect().adjusted(margin, margin, -margin, -margin)
+        painter.drawText(text_rect, Qt.AlignLeft | Qt.AlignTop | Qt.TextWordWrap,
+                         self._placeholder)
+
+
+class PlaceholderTextItem(QGraphicsTextItem, _PlaceholderMixin):
+    """QGraphicsTextItem với placeholder hiển thị khi chưa gõ chữ."""
+
+    def __init__(self, placeholder: str = "") -> None:
+        super().__init__("")
+        self._init_placeholder(placeholder)
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        if self.textInteractionFlags() != Qt.NoTextInteraction:
+            self.setTextInteractionFlags(Qt.NoTextInteraction)
+            cursor = self.textCursor()
+            cursor.clearSelection()
+            self.setTextCursor(cursor)
+            self.update()
+
+    def keyPressEvent(self, event) -> None:
+        if (event.key() == Qt.Key_Escape
+                and self.textInteractionFlags() != Qt.NoTextInteraction):
+            self.clearFocus()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        opt = QStyleOptionGraphicsItem(option)
+        opt.state &= ~QStyle.State_Selected
+        super().paint(painter, opt, widget)
+        self._paint_placeholder(painter)
+
+
+class CalloutItem(QGraphicsTextItem, _PlaceholderMixin):
     """Callout / speech bubble: chữ trong bong bóng bo góc + đuôi nhọn trỏ xuống.
 
     Subclass QGraphicsTextItem để tái dùng nguyên pipeline soạn-thảo-text (con trỏ,
@@ -336,9 +399,9 @@ class CalloutItem(QGraphicsTextItem):
 
     _TAIL_H = 18.0   # chiều cao phần đuôi nằm dưới khung chữ
 
-    def __init__(self, text: str, fill: QColor, border: QColor,
+    def __init__(self, placeholder: str, fill: QColor, border: QColor,
                  width: int, font_size: int) -> None:
-        super().__init__(text)
+        super().__init__("")
         self._fill = QColor(fill)
         self._border = QColor(border)
         self._width = int(width)
@@ -347,6 +410,7 @@ class CalloutItem(QGraphicsTextItem):
         font.setPointSize(int(font_size))
         self.setFont(font)
         self.setDefaultTextColor(self._border)  # chữ cùng màu viền
+        self._init_placeholder(placeholder)
 
     def set_fill(self, color: QColor) -> None:
         """Đổi màu nền bong bóng (dùng cho mutate style)."""
@@ -365,9 +429,10 @@ class CalloutItem(QGraphicsTextItem):
         """Vào chế độ soạn chữ: bật text-control, lấy focus, chọn hết để gõ đè."""
         self.setTextInteractionFlags(Qt.TextEditorInteraction)
         self.setFocus()
-        cursor = self.textCursor()
-        cursor.select(QTextCursor.Document)
-        self.setTextCursor(cursor)
+        if not self._is_empty():
+            cursor = self.textCursor()
+            cursor.select(QTextCursor.Document)
+            self.setTextCursor(cursor)
 
     def focusOutEvent(self, event) -> None:
         """Rời focus → thoát soạn chữ, trở thành object thường (chọn/move/resize)."""
@@ -419,6 +484,7 @@ class CalloutItem(QGraphicsTextItem):
         opt = QStyleOptionGraphicsItem(option)
         opt.state &= ~QStyle.State_Selected
         super().paint(painter, opt, widget)
+        self._paint_placeholder(painter)
 
 
 def capture_item_style(item: QGraphicsItem) -> dict:
@@ -811,6 +877,7 @@ class Canvas(QGraphicsView):
         self._resize_old_transform: QTransform | None = None
         self._scene.selectionChanged.connect(self._update_handles)
         self._scene.selectionChanged.connect(self.selection_changed)
+        self._scene.focusItemChanged.connect(self._on_focus_changed)
 
     # ---------- ảnh nền ----------
     def load_image(self, image: QImage) -> None:
@@ -887,6 +954,10 @@ class Canvas(QGraphicsView):
     # ---------- xuất ảnh ----------
     def render_to_image(self) -> QImage:
         """Gộp ảnh nền + mọi chú thích thành QImage để lưu."""
+        # Thoát soạn chữ (nếu đang gõ) → kích hoạt auto-cleanup item rỗng.
+        fi = self._scene.focusItem()
+        if fi is not None:
+            fi.clearFocus()
         rect = self._scene.sceneRect()
         image = QImage(int(rect.width()), int(rect.height()),
                        QImage.Format_ARGB32)
@@ -897,6 +968,13 @@ class Canvas(QGraphicsView):
         self._scene.render(painter, QRectF(image.rect()), rect)
         painter.end()
         return image
+
+    def _on_focus_changed(self, old_item, _new_item) -> None:
+        """Xoá text/callout rỗng khi mất focus (Escape, click chỗ khác…)."""
+        if (isinstance(old_item, _PlaceholderMixin)
+                and old_item._is_empty()
+                and old_item.scene() is not None):
+            self.undo_stack.push(DeleteItemsCommand(self._scene, [old_item]))
 
     # ---------- chuột vẽ ----------
     def mousePressEvent(self, event) -> None:
@@ -1061,11 +1139,16 @@ class Canvas(QGraphicsView):
         self._pen_path = None
 
     def mouseDoubleClickEvent(self, event) -> None:
-        # Double-click một Callout → vào soạn chữ (mọi công cụ).
+        # Double-click một Callout hoặc Text → vào soạn chữ (mọi công cụ).
         if self.has_image():
             hit = self._annotation_at(event.position().toPoint())
             if isinstance(hit, CalloutItem):
                 hit.enter_edit()
+                event.accept()
+                return
+            if isinstance(hit, PlaceholderTextItem):
+                hit.setTextInteractionFlags(Qt.TextEditorInteraction)
+                hit.setFocus()
                 event.accept()
                 return
         super().mouseDoubleClickEvent(event)
@@ -1080,7 +1163,7 @@ class Canvas(QGraphicsView):
         self.undo_stack.push(AddItemCommand(self._scene, item))
 
     def _add_text(self, pos: QPointF) -> None:
-        item = QGraphicsTextItem("Nhập chữ...")
+        item = PlaceholderTextItem("Nhập chữ...")
         font = QFont()
         font.setPointSize(self.state.font_size)
         item.setFont(font)
