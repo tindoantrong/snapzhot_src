@@ -8,16 +8,19 @@ Luồng chính:
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import datetime
 
 from PySide6.QtCore import QObject, QRect, Qt, QThread, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QImage
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSystemTrayIcon,
     QTextEdit,
@@ -46,6 +49,28 @@ _log = logging.getLogger(__name__)
 # Watchdog tick mỗi 5 giây — phát hiện processing_thread chết và ghi log chẩn đoán.
 _HOTKEY_WATCHDOG_INTERVAL_MS = 5_000
 
+# Hiển thị tên phím thân thiện cho tray message (keyboard lib → UI).
+_HOTKEY_DISPLAY_MAP = {
+    "windows": "Win", "win": "Win", "ctrl": "Ctrl", "control": "Ctrl",
+    "shift": "Shift", "alt": "Alt",
+    "print screen": "PrtSc", "print_screen": "PrtSc", "prtsc": "PrtSc",
+}
+
+
+def _format_hotkey_display(kb_str: str) -> str:
+    """'windows+shift+a' → 'Win+Shift+A' cho thông báo người dùng."""
+    parts: list[str] = []
+    for tok in kb_str.split("+"):
+        tok = tok.strip()
+        low = tok.lower()
+        if low in _HOTKEY_DISPLAY_MAP:
+            parts.append(_HOTKEY_DISPLAY_MAP[low])
+        elif len(tok) == 1:
+            parts.append(tok.upper())
+        else:
+            parts.append(tok.capitalize())
+    return " + ".join(parts)
+
 
 _UPDATE_QSS = """
 QDialog { background:#2B2D31; }
@@ -66,6 +91,17 @@ QPushButton:disabled { background:#2F3136; color:#7A7D82; }
 /* Nút primary khi DISABLE: ID-selector #primary thắng :disabled về specificity nên
    phải có rule riêng (ID+pseudo) để hóa xám đúng, tránh hiểu nhầm còn bấm được. */
 QPushButton#primary:disabled { background:#2F3136; color:#7A7D82; }
+QProgressBar {
+    background:#1E1F22; border:1px solid #3A3D42; border-radius:4px;
+    text-align:center; color:#C8C8C8; font-size:11px;
+}
+QProgressBar::chunk { background:#1E90FF; border-radius:3px; }
+QCheckBox { color:#C8C8C8; font-size:12px; spacing:6px; }
+QCheckBox::indicator {
+    width:14px; height:14px; border:1px solid #3A3D42;
+    border-radius:3px; background:#1E1F22;
+}
+QCheckBox::indicator:checked { background:#1E90FF; border-color:#1E90FF; }
 """
 
 
@@ -89,10 +125,34 @@ class _UpdateCheckWorker(QObject):
         self.finished.emit(info)
 
 
+class _DownloadWorker(QObject):
+    """Tải file cập nhật ở luồng nền, phát progress và kết quả."""
+
+    progress = Signal(int, int)  # (bytes_downloaded, total_bytes)
+    finished = Signal(str)       # đường dẫn file đã tải
+    error = Signal(str)          # thông điệp lỗi
+
+    def __init__(self, url: str) -> None:
+        super().__init__()
+        self._url = url
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            path = updater.download_update(
+                self._url,
+                progress_cb=lambda downloaded, total: self.progress.emit(downloaded, total),
+            )
+            self.finished.emit(path)
+        except Exception as exc:
+            self.error.emit(str(exc) or "Lỗi không xác định khi tải cập nhật.")
+
+
 class _UpdateDialog(QDialog):
     """Hộp thoại cập nhật theme tối, đổi nội dung theo 5 trạng thái.
 
-    Trạng thái: idle / checking / available (Tải về) / latest / error (Thử lại).
+    Trạng thái: idle / checking / available (Tải về) / latest / error (Thử lại)
+    / downloading / downloaded.
     Việc kiểm tra thực hiện ở luồng nền — dialog chỉ phát `check_requested` và
     nhận kết quả qua `show_result`.
     """
@@ -103,7 +163,10 @@ class _UpdateDialog(QDialog):
         super().__init__()
         self._current = current_version
         self._download_url = ""
+        self._downloaded_path = ""
         self._mode = "idle"
+        self._dl_thread: QThread | None = None
+        self._dl_worker: _DownloadWorker | None = None
 
         self.setWindowTitle(f"Cập nhật {APP_NAME}")
         self.setMinimumWidth(380)
@@ -127,6 +190,16 @@ class _UpdateDialog(QDialog):
         self.notes.hide()
         layout.addWidget(self.notes)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(18)
+        self.progress_bar.hide()
+        layout.addWidget(self.progress_bar)
+
+        self.auto_install_cb = QCheckBox("Tải xong tự động cài đặt")
+        self.auto_install_cb.setChecked(True)
+        self.auto_install_cb.hide()
+        layout.addWidget(self.auto_install_cb)
+
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         self.close_btn = QPushButton("Đóng")
@@ -141,7 +214,6 @@ class _UpdateDialog(QDialog):
         self.show_idle()
 
     def _on_action(self) -> None:
-        # Khi có bản mới: nút là "Tải về" → mở URL. Ngược lại: chạy kiểm tra mới.
         if self._mode == "available" and self._download_url:
             if not updater.is_safe_update_url(self._download_url):
                 QMessageBox.warning(
@@ -151,24 +223,124 @@ class _UpdateDialog(QDialog):
                     "Chỉ chấp nhận liên kết https://github.com/…",
                 )
                 return
-            QDesktopServices.openUrl(QUrl(self._download_url))
+            self._start_download()
+            return
+        if self._mode == "downloaded" and self._downloaded_path:
+            self._run_installer()
             return
         self.show_checking()
         self.check_requested.emit()
+
+    # ---------- download ----------
+    def _start_download(self) -> None:
+        """Bắt đầu tải installer ở luồng nền."""
+        if self._dl_thread is not None:
+            return
+        self._mode = "downloading"
+        self.status.setText("Đang tải bản cập nhật…")
+        self.progress_bar.setValue(0)
+        self.progress_bar.setRange(0, 0)  # indeterminate cho tới khi biết total
+        self.progress_bar.show()
+        self.auto_install_cb.show()
+        self.action_btn.setEnabled(False)
+        self.action_btn.setText("Đang tải…")
+        self.close_btn.setEnabled(False)
+
+        thread = QThread(self)
+        worker = _DownloadWorker(self._download_url)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_dl_progress)
+        worker.finished.connect(self._on_dl_finished)
+        worker.error.connect(self._on_dl_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_dl_thread)
+        self._dl_thread = thread
+        self._dl_worker = worker
+        thread.start()
+
+    @Slot(int, int)
+    def _on_dl_progress(self, downloaded: int, total: int) -> None:
+        if total > 0:
+            self.progress_bar.setRange(0, total)
+            self.progress_bar.setValue(downloaded)
+            mb_dl = downloaded / (1024 * 1024)
+            mb_total = total / (1024 * 1024)
+            self.status.setText(f"Đang tải… {mb_dl:.1f} / {mb_total:.1f} MB")
+        else:
+            self.progress_bar.setRange(0, 0)
+            mb_dl = downloaded / (1024 * 1024)
+            self.status.setText(f"Đang tải… {mb_dl:.1f} MB")
+
+    @Slot(str)
+    def _on_dl_finished(self, path: str) -> None:
+        self._downloaded_path = path
+        self._mode = "downloaded"
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(1)
+        self.close_btn.setEnabled(True)
+        self.close_btn.setText("Để sau")
+        if self.auto_install_cb.isChecked():
+            self.status.setText("Tải xong! Đang mở trình cài đặt…")
+            QTimer.singleShot(500, self._run_installer)
+        else:
+            self.status.setText("Tải xong! Nhấn \"Cài đặt ngay\" để bắt đầu.")
+            self.action_btn.setText("Cài đặt ngay")
+            self.action_btn.setEnabled(True)
+
+    @Slot(str)
+    def _on_dl_error(self, msg: str) -> None:
+        self._mode = "error"
+        self.progress_bar.hide()
+        self.auto_install_cb.hide()
+        self.status.setText(f"Lỗi khi tải: {msg}")
+        self.action_btn.setText("Thử lại")
+        self.action_btn.setEnabled(True)
+        self.close_btn.setEnabled(True)
+        self.close_btn.setText("Đóng")
+
+    def _clear_dl_thread(self) -> None:
+        self._dl_thread = None
+        self._dl_worker = None
+
+    def _run_installer(self) -> None:
+        """Chạy file installer đã tải và thoát app."""
+        path = self._downloaded_path
+        if not path or not os.path.isfile(path):
+            QMessageBox.warning(self, "Lỗi", "Không tìm thấy file cài đặt đã tải.")
+            return
+        try:
+            subprocess.Popen(
+                [path],
+                creationflags=subprocess.DETACHED_PROCESS,
+            )
+        except OSError as exc:
+            QMessageBox.warning(self, "Lỗi", f"Không thể chạy trình cài đặt:\n{exc}")
+            return
+        QGuiApplication.quit()
 
     def show_idle(self) -> None:
         self._mode = "idle"
         self.status.setText(f"Phiên bản hiện tại: {self._current}")
         self.notes.hide()
+        self.progress_bar.hide()
+        self.auto_install_cb.hide()
         self.action_btn.setText("Kiểm tra cập nhật")
         self.action_btn.setEnabled(True)
         self.action_btn.setToolTip("")
         self.close_btn.setText("Đóng")
+        self.close_btn.setEnabled(True)
 
     def show_checking(self) -> None:
         self._mode = "checking"
         self.status.setText("Đang kiểm tra…")
         self.notes.hide()
+        self.progress_bar.hide()
+        self.auto_install_cb.hide()
         self.action_btn.setEnabled(False)
 
     def show_result(self, info) -> None:
@@ -176,6 +348,8 @@ class _UpdateDialog(QDialog):
             self._mode = "error"
             self.status.setText(info.error)
             self.notes.hide()
+            self.progress_bar.hide()
+            self.auto_install_cb.hide()
             self.action_btn.setText("Thử lại")
             self.action_btn.setEnabled(True)
             self.action_btn.setToolTip("")
@@ -192,7 +366,8 @@ class _UpdateDialog(QDialog):
                 self.notes.show()
             else:
                 self.notes.hide()
-            self.action_btn.setText("Tải về")
+            self.auto_install_cb.show()
+            self.action_btn.setText("Tải và cài đặt")
             if updater.is_safe_update_url(info.url):
                 self.action_btn.setEnabled(True)
                 self.action_btn.setToolTip("")
@@ -207,6 +382,8 @@ class _UpdateDialog(QDialog):
             self._mode = "latest"
             self.status.setText("Bạn đang dùng phiên bản mới nhất.")
             self.notes.hide()
+            self.progress_bar.hide()
+            self.auto_install_cb.hide()
             self.action_btn.setText("Kiểm tra lại")
             self.action_btn.setEnabled(True)
             self.action_btn.setToolTip("")
@@ -265,6 +442,7 @@ class AppController(QObject):
         self._recording_region: dict | None = None
         self._esc_handle = None
         self._remove_region_hook = None  # cleanup handle cho hook_key PrtScn (tránh accumulate)
+        self._hotkey_dialog_open = False  # guard: chặn capture khi dialog phím tắt đang mở
         # Watchdog phát hiện thread chết + periodic hard-restart phòng silent hook removal.
         self._hotkey_watchdog: QTimer | None = None
         self._hotkey_watchdog_tick: int = 0
@@ -289,6 +467,10 @@ class AppController(QObject):
         self.request_region.connect(self.capture_region, Qt.QueuedConnection)
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
+
+        # Tự kiểm tra cập nhật 30s sau khi khởi động (không làm chậm startup).
+        self._auto_check_done = False
+        QTimer.singleShot(30_000, self._auto_check_for_updates)
 
     # ---------- khay hệ thống ----------
     def _build_tray(self) -> None:
@@ -361,6 +543,10 @@ class AppController(QObject):
         update_act = QAction("Kiểm tra cập nhật…", self)
         update_act.triggered.connect(self._open_update_dialog)
         menu.addAction(update_act)
+
+        feedback_act = QAction("Góp ý / Báo lỗi…", self)
+        feedback_act.triggered.connect(self._open_feedback_page)
+        menu.addAction(feedback_act)
         menu.addSeparator()
 
         quit_act = QAction("Thoát", self)
@@ -369,6 +555,7 @@ class AppController(QObject):
 
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._on_tray_activated)
+        self.tray.messageClicked.connect(self._open_update_dialog)
         self.tray.show()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
@@ -420,6 +607,46 @@ class AppController(QObject):
     def _on_update_dialog_finished(self, _result: int) -> None:
         self._update_dialog = None
 
+    # ---------- tự kiểm tra cập nhật khi khởi động ----------
+    def _auto_check_for_updates(self) -> None:
+        """Chạy kiểm tra cập nhật tự động 1 lần sau khi khởi động."""
+        if self._auto_check_done or self._update_thread is not None:
+            return
+        self._auto_check_done = True
+        url = self.config.get("update_manifest_url", updater.UPDATE_MANIFEST_URL)
+        thread = QThread(self)
+        worker = _UpdateCheckWorker(__version__, url)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_auto_check_result)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_update_thread)
+        self._update_thread = thread
+        self._update_worker = worker
+        thread.start()
+
+    @Slot(object)
+    def _on_auto_check_result(self, info) -> None:
+        """Nhận kết quả auto-check: hiển thị tray notification nếu có bản mới."""
+        if not info.available:
+            return
+        self.tray.showMessage(
+            f"{APP_NAME} — Có bản cập nhật mới!",
+            f"Phiên bản {info.latest} đã sẵn sàng (bạn đang dùng {info.current}).\n"
+            "Nhấn vào đây để cập nhật.",
+            app_icon(),
+            10_000,  # hiển thị 10 giây
+        )
+
+    # ---------- góp ý ----------
+    def _open_feedback_page(self) -> None:
+        """Mở trang tạo issue trên GitHub để người dùng góp ý hoặc báo lỗi."""
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/tindoantrong/snapzhot_src/issues/new")
+        )
+
     # ---------- chụp ----------
     def _hide_app_windows(self) -> None:
         """Ẩn cửa sổ app trước khi chụp để không lọt vào ảnh."""
@@ -429,6 +656,8 @@ class AppController(QObject):
 
     @Slot()
     def capture_region(self) -> None:
+        if self._hotkey_dialog_open:
+            return  # Bỏ qua: dialog phím tắt đang mở, tránh kẹt screenshot mode
         # Ẩn cửa sổ rồi mới hiện overlay (chờ một nhịp cho cửa sổ biến mất).
         self._hide_app_windows()
         QTimer.singleShot(180, self.region_selector.start)
@@ -577,6 +806,7 @@ class AppController(QObject):
 
         # Tạm gỡ MỌI hotkey toàn cục — tránh nhấn tổ hợp phím cũ khi dialog mở
         # kích hoạt chế độ chụp/quay (kẹt không thoát được, issue #1).
+        self._hotkey_dialog_open = True
         try:
             import keyboard
             if self._remove_region_hook is not None:
@@ -589,19 +819,33 @@ class AppController(QObject):
         except Exception:
             pass
 
-        dlg = HotkeyDialog(current)
-        accepted = dlg.exec() == QDialog.Accepted
-        new = dlg.value() if accepted else ""
+        try:
+            dlg = HotkeyDialog(current)
+            accepted = dlg.exec() == QDialog.Accepted
+            new = dlg.value() if accepted else ""
 
-        if accepted and new and new != current:
-            self.config["hotkey_region"] = new
-            save_config(self.config)
+            if accepted and new and new != current:
+                self.config["hotkey_region"] = new
+                save_config(self.config)
 
-        # Luôn đăng ký lại hotkey (dù OK hay Cancel).
-        self.reload_global_hotkeys()
+            # Luôn đăng ký lại hotkey (dù OK hay Cancel).
+            self.reload_global_hotkeys()
 
-        if accepted and new and new != current:
-            self.tray.showMessage(APP_NAME, f"Đã đặt phím chụp vùng: {new}")
+            if accepted and new and new != current:
+                self.tray.showMessage(
+                    APP_NAME,
+                    f"Đã đặt phím chụp vùng: {_format_hotkey_display(new)}",
+                )
+        finally:
+            # Trì hoãn gỡ guard 300ms — tránh race condition: keyboard thread có thể
+            # phát tín hiệu request_region ngay sau reload_global_hotkeys(); tín hiệu
+            # được queue qua QueuedConnection và xử lý ở vòng lặp event tiếp theo,
+            # lúc đó _hotkey_dialog_open đã False → capture_region() chạy → kẹt.
+            # 300ms đủ để mọi sự kiện phím cũ được drain hết.
+            QTimer.singleShot(300, self._clear_hotkey_dialog_guard)
+
+    def _clear_hotkey_dialog_guard(self) -> None:
+        self._hotkey_dialog_open = False
 
     def _on_startup_toggled(self, checked: bool) -> None:
         if not autostart.set_enabled(checked):

@@ -11,7 +11,6 @@ Hai hàm dưới đây map qua lại, chú ý ca lệch phím Print:
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
@@ -97,6 +96,7 @@ class HotkeyDialog(QDialog):
     def __init__(self, current: str = "", parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Cài đặt phím tắt chụp vùng")
+        self._fixing_meta = False  # guard chống đệ quy khi thay Meta→Win
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Nhấn tổ hợp phím muốn dùng để chụp vùng:"))
@@ -107,7 +107,15 @@ class HotkeyDialog(QDialog):
             self._edit.setMaximumSequenceLength(1)
         except Exception:
             pass
-        self._edit.keySequenceChanged.connect(self._fix_meta_display)
+
+        # Kết nối trực tiếp vào QLineEdit nội bộ để thay "Meta" → "Win" mỗi khi
+        # text thay đổi (bao gồm cả lần đầu setKeySequence và khi user nhấn phím).
+        # Cách cũ dùng QTimer(0/30/80ms) không đáng tin — QKeySequenceEdit có thể
+        # ghi đè text SAU khi timer chạy.
+        le = self._edit.findChild(QLineEdit)
+        if le:
+            le.textChanged.connect(self._on_lineedit_text_changed)
+
         if current:
             self._edit.setKeySequence(keyboard_to_qkeyseq(current))
         layout.addWidget(self._edit)
@@ -127,16 +135,20 @@ class HotkeyDialog(QDialog):
         """Đặt lại về phím mặc định PrtSc."""
         self._edit.setKeySequence(keyboard_to_qkeyseq("print screen"))
 
-    def _fix_meta_display(self) -> None:
-        """Thay 'Meta' → 'Win' trong ô hiển thị (Windows dùng phím Win, không gọi Meta)."""
-        QTimer.singleShot(0, self._apply_win_label)
+    def _on_lineedit_text_changed(self, text: str) -> None:
+        """Thay 'Meta' → 'Win' mỗi khi QLineEdit nội bộ cập nhật text.
 
-    def _apply_win_label(self) -> None:
+        Dùng guard ``_fixing_meta`` để tránh đệ quy (setText phát textChanged).
+        """
+        if self._fixing_meta:
+            return
+        if "Meta" not in text:
+            return
         le = self._edit.findChild(QLineEdit)
         if le:
-            t = le.text()
-            if "Meta" in t:
-                le.setText(t.replace("Meta", "Win"))
+            self._fixing_meta = True
+            le.setText(text.replace("Meta", "Win"))
+            self._fixing_meta = False
 
     def value(self) -> str:
         """Chuỗi phím theo định dạng thư viện `keyboard` (rỗng nếu chưa nhập)."""
