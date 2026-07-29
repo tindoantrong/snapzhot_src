@@ -1,5 +1,5 @@
 {
-  "version": "0.1.25",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.25.exe",
-  "notes": "Sửa lỗi app tự ẩn khi chụp màn hình; giờ cửa sổ Editor và Library giữ nguyên khi chụp vùng, chụp toàn màn hình, chụp cửa sổ hoặc chụp hẹn giờ — cho phép chụp được chính màn hình app."
+  "version": "0.1.26",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.26.exe",
+  "notes": "Thêm tính năng copy ảnh bằng Ctrl+C ở màn hình thư viện; chọn ảnh rồi nhấn Ctrl+C để copy vào clipboard, sau đó có thể dán vào ứng dụng khác."
 }

@@ -281,11 +281,30 @@ class LibraryWindow(QMainWindow):
         return [it.data(Qt.UserRole) for it in self.list.selectedItems()]
 
     def keyPressEvent(self, event) -> None:
+        # Ctrl+C: copy ảnh đang chọn vào clipboard.
+        if event.key() == Qt.Key_C and event.modifiers() == Qt.ControlModifier:
+            self._copy_selected_image()
+            return
         # Phím Delete xoá các mục đang chọn (qua hộp thoại xác nhận).
         if event.key() == Qt.Key_Delete and self.list.selectedItems():
             self._delete_selected()
             return
         super().keyPressEvent(event)
+
+    def _copy_selected_image(self) -> None:
+        """Copy ảnh đang chọn vào clipboard hệ thống."""
+        from PySide6.QtWidgets import QApplication
+
+        cid = self._selected_id()
+        if cid is None:
+            return
+        cap = self.library.get(cid)
+        if cap is None or cap.is_video:
+            return
+        image = QPixmap(cap.path)
+        if image.isNull():
+            return
+        QApplication.clipboard().setPixmap(image)
 
     def _open_selected(self, *_) -> None:
         cid = self._selected_id()
