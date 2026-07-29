@@ -1357,7 +1357,7 @@ class AppController(QObject):
             self.editor._show_toast("Không tìm thấy văn bản trong ảnh")
             return
         QGuiApplication.clipboard().setText(text)
-        self.editor._show_toast("Đã copy văn bản vào clipboard")
+        self.editor.show_ocr_result(text)
 
     @Slot(str)
     def _on_ocr_error(self, message: str) -> None:

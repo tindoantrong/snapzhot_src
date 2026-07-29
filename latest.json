@@ -1,5 +1,5 @@
 {
-  "version": "0.1.20",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.20.exe",
-  "notes": "Thêm chức năng OCR: nếu máy đã cài Claude CLI, nút \"OCR ảnh\" (Ctrl+Shift+O) xuất hiện trong Editor, nhận diện và trích xuất văn bản từ ảnh rồi tự động copy vào clipboard."
+  "version": "0.1.21",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.21.exe",
+  "notes": "Sửa lỗi OCR ảnh không hoạt động; thêm tính năng OCR vùng chọn (Ctrl+Shift+R) để chỉ trích xuất văn bản trong khu vực kéo chọn; kết quả OCR giờ hiện trong cửa sổ riêng để dễ dàng quét chọn và copy từng phần."
 }

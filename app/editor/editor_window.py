@@ -25,6 +25,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QGraphicsOpacityEffect,
@@ -35,10 +36,12 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSlider,
     QSpinBox,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -90,6 +93,7 @@ TOOL_HINTS = {
     Tool.CROP: "Cắt: kéo chọn vùng giữ lại, phần ngoài bị cắt bỏ.",
     Tool.STAMP: "Stamp: nhấp để chèn biểu tượng.",
     Tool.SPOTLIGHT: "Tiêu điểm: kéo chọn vùng cần làm nổi bật (ngoài vùng bị làm tối).",
+    Tool.OCR_REGION: "OCR vùng: kéo chọn vùng cần trích xuất văn bản.",
 }
 
 # Nhóm thuộc tính liên quan tới từng công cụ (panel chỉ hiện nhóm phù hợp).
@@ -108,6 +112,7 @@ TOOL_PROPS = {
     Tool.CROP: [],
     Tool.STAMP: ["stamp", "color"],
     Tool.SPOTLIGHT: [],
+    Tool.OCR_REGION: [],
 }
 
 # Express Styles: preset áp combo style nhanh cho object đang chọn + state vẽ-mới.
@@ -300,6 +305,7 @@ class EditorWindow(QMainWindow):
         self.canvas.resize_preview.connect(self._on_resize_preview)
         self.canvas.resize_finished.connect(self._on_resize_finished)
         self.canvas.selection_changed.connect(self._refresh_props)
+        self.canvas.ocr_region_selected.connect(self.request_ocr)
         self._select_tool(Tool.ARROW)
         self._refresh_empty_state()
 
@@ -701,12 +707,25 @@ class EditorWindow(QMainWindow):
         from ..ocr import claude_cli_available
         if claude_cli_available():
             tb.addSeparator()
-            act_ocr = QAction("OCR ảnh", self)
-            act_ocr.setIcon(tool_icon("ocr"))
-            act_ocr.setShortcut(QKeySequence("Ctrl+Shift+O"))
-            act_ocr.setToolTip("Trích xuất văn bản từ ảnh (Ctrl+Shift+O)")
-            act_ocr.triggered.connect(self._ocr_full_image)
-            tb.addAction(act_ocr)
+            ocr_menu = QMenu(self)
+            act_ocr_full = ocr_menu.addAction("OCR toàn bộ ảnh")
+            act_ocr_full.setShortcut(QKeySequence("Ctrl+Shift+O"))
+            act_ocr_full.triggered.connect(self._ocr_full_image)
+            act_ocr_region = ocr_menu.addAction("OCR vùng chọn")
+            act_ocr_region.setShortcut(QKeySequence("Ctrl+Shift+R"))
+            act_ocr_region.triggered.connect(self._ocr_select_region)
+            btn_ocr = QToolButton(self)
+            btn_ocr.setText("OCR ảnh")
+            btn_ocr.setIcon(tool_icon("ocr"))
+            btn_ocr.setToolTip("Trích xuất văn bản từ ảnh (Ctrl+Shift+O)")
+            btn_ocr.setMenu(ocr_menu)
+            btn_ocr.setPopupMode(QToolButton.MenuButtonPopup)
+            btn_ocr.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            btn_ocr.clicked.connect(self._ocr_full_image)
+            tb.addWidget(btn_ocr)
+            # Đăng ký shortcut cho OCR vùng chọn (action nằm trong menu, cần addAction vào window).
+            self.addAction(act_ocr_full)
+            self.addAction(act_ocr_region)
 
     # ---------- dải ảnh gần đây (filmstrip) ----------
     def _build_recent_dock(self) -> None:
@@ -980,6 +999,7 @@ class EditorWindow(QMainWindow):
         Tool.CROP: Qt.CrossCursor,
         Tool.STAMP: Qt.CrossCursor,
         Tool.SPOTLIGHT: Qt.CrossCursor,
+        Tool.OCR_REGION: Qt.CrossCursor,
     }
 
     def _select_tool(self, tool: Tool) -> None:
@@ -1183,6 +1203,38 @@ class EditorWindow(QMainWindow):
             self._show_toast("Chưa có ảnh để OCR")
             return
         self.request_ocr.emit(self.canvas.render_to_image())
+
+    def _ocr_select_region(self) -> None:
+        """Chuyển sang công cụ OCR vùng: kéo chọn vùng rồi OCR."""
+        if not self.canvas.has_image():
+            self._show_toast("Chưa có ảnh để OCR")
+            return
+        self.canvas.state.tool = Tool.OCR_REGION
+        self._show_toast("Kéo chọn vùng cần OCR")
+
+    def show_ocr_result(self, text: str) -> None:
+        """Hiện hộp thoại chứa kết quả OCR để người dùng chọn và copy."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Kết quả OCR")
+        dlg.resize(500, 350)
+        layout = QVBoxLayout(dlg)
+        edit = QPlainTextEdit(dlg)
+        edit.setPlainText(text)
+        edit.setReadOnly(True)
+        layout.addWidget(edit)
+        btn_row = QHBoxLayout()
+        btn_copy = QPushButton("Copy tất cả")
+        btn_copy.clicked.connect(lambda: (
+            QGuiApplication.clipboard().setText(text),
+            self._show_toast("Đã copy văn bản"),
+        ))
+        btn_close = QPushButton("Đóng")
+        btn_close.clicked.connect(dlg.close)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_copy)
+        btn_row.addWidget(btn_close)
+        layout.addLayout(btn_row)
+        dlg.show()
 
     def _paste_clipboard(self) -> None:
         """Dán ảnh từ clipboard vào editor.

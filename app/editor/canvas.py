@@ -70,6 +70,7 @@ class Tool(Enum):
     STAMP = auto()
     SPOTLIGHT = auto()
     CALLOUT = auto()
+    OCR_REGION = auto()
 
 
 @dataclass
@@ -847,6 +848,8 @@ class Canvas(QGraphicsView):
     resize_finished = Signal()
     # Phát khi tập chọn thay đổi → panel đồng bộ nhóm thuộc tính theo item đang chọn.
     selection_changed = Signal()
+    # Phát QImage vùng chọn OCR khi người dùng kéo xong.
+    ocr_region_selected = Signal(QImage)
 
     def __init__(self) -> None:
         super().__init__()
@@ -1040,7 +1043,7 @@ class Canvas(QGraphicsView):
                 self._start, self._start, self.state.color, self.state.width
             )
         elif t in (Tool.BLUR, Tool.HIGHLIGHT, Tool.CROP, Tool.SPOTLIGHT,
-                   Tool.CALLOUT):
+                   Tool.CALLOUT, Tool.OCR_REGION):
             self._temp_item = QGraphicsRectItem(QRectF(self._start, self._start))
             self._temp_item.setPen(QPen(QColor("#1E90FF"), 1, Qt.DashLine))
         elif t == Tool.PEN:
@@ -1071,7 +1074,7 @@ class Canvas(QGraphicsView):
         cur = self.mapToScene(event.position().toPoint())
         t = self.state.tool
         if t in (Tool.RECT, Tool.ELLIPSE, Tool.BLUR, Tool.HIGHLIGHT, Tool.CROP,
-                 Tool.SPOTLIGHT, Tool.CALLOUT):
+                 Tool.SPOTLIGHT, Tool.CALLOUT, Tool.OCR_REGION):
             self._temp_item.setRect(QRectF(self._start, cur).normalized())
         elif t == Tool.ARROW:
             self._temp_item.set_points(self._start, cur)
@@ -1119,6 +1122,10 @@ class Canvas(QGraphicsView):
             rect = QRectF(self._start, cur).normalized()
             self._scene.removeItem(self._temp_item)
             self._apply_crop(rect)
+        elif t == Tool.OCR_REGION:
+            rect = QRectF(self._start, cur).normalized()
+            self._scene.removeItem(self._temp_item)
+            self._extract_ocr_region(rect)
         elif t == Tool.SPOTLIGHT:
             rect = QRectF(self._start, cur).normalized()
             self._scene.removeItem(self._temp_item)
@@ -1277,6 +1284,16 @@ class Canvas(QGraphicsView):
         new_sub = small.scaled(r.width(), r.height(),
                                Qt.IgnoreAspectRatio, Qt.FastTransformation)
         self.undo_stack.push(BlurCommand(self._bg_item, r, old_sub, new_sub))
+
+    def _extract_ocr_region(self, rect: QRectF) -> None:
+        """Cắt vùng chọn từ ảnh nền, phát signal ocr_region_selected."""
+        if self._bg_item is None:
+            return
+        r = rect.intersected(self._scene.sceneRect()).toRect()
+        if r.width() < 2 or r.height() < 2:
+            return
+        region = self._bg_item.pixmap().toImage().copy(r)
+        self.ocr_region_selected.emit(region)
 
     def _apply_crop(self, rect: QRectF) -> None:
         """Cắt ảnh theo vùng chọn qua CropCommand (undo được), rồi fit lại."""
