@@ -25,7 +25,6 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
-    QDialog,
     QDockWidget,
     QFileDialog,
     QGraphicsOpacityEffect,
@@ -38,6 +37,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QToolBar,
@@ -258,6 +259,34 @@ QMenu::item:selected { background: #1E90FF; color: #FFFFFF; }
     padding: 9px 18px;
     font-size: 13px;
 }
+#ocrPanel { background: #2B2D31; }
+#ocrPanel QLabel { color: #DDDDDD; }
+#ocrPanel QPlainTextEdit {
+    background: #33363B;
+    color: #E8E8E8;
+    border: 1px solid #4A4D52;
+    border-radius: 4px;
+    font-size: 13px;
+    padding: 6px;
+}
+#ocrEntry {
+    background: #33363B;
+    border: 1px solid #4A4D52;
+    border-radius: 6px;
+}
+#ocrEntry:hover { border-color: #1E90FF; }
+#ocrTimestamp { color: #9AA0A6; font-size: 11px; }
+#ocrPanel QPushButton {
+    background: #3E4248;
+    color: #E8E8E8;
+    border: 1px solid #55585E;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+#ocrPanel QPushButton:hover { background: #484C53; }
+#ocrPanel QPushButton:pressed { background: #2F3338; }
+#ocrEmptyHint { color: #9AA0A6; font-size: 13px; }
 """
 
 
@@ -276,6 +305,10 @@ class EditorWindow(QMainWindow):
     request_library = Signal()
     # Phát QImage khi người dùng yêu cầu OCR (ảnh toàn bộ hoặc vùng chọn).
     request_ocr = Signal(QImage)
+    # Phát capture_id khi cần tải lịch sử OCR.
+    ocr_history_requested = Signal(int)
+    # Phát (entry_id,) khi người dùng xoá một mục OCR.
+    ocr_delete_requested = Signal(int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -293,6 +326,7 @@ class EditorWindow(QMainWindow):
         self._build_zoom_toolbar()
         self._build_properties_panel()
         self._build_bottom_toolbar()
+        self._build_ocr_history_panel()
         self._build_recent_dock()
         self._build_status_bar()
         self._build_overlays()
@@ -714,6 +748,10 @@ class EditorWindow(QMainWindow):
             act_ocr_region = ocr_menu.addAction("OCR vùng chọn")
             act_ocr_region.setShortcut(QKeySequence("Ctrl+Shift+R"))
             act_ocr_region.triggered.connect(self._ocr_select_region)
+            ocr_menu.addSeparator()
+            act_ocr_history = ocr_menu.addAction("Lịch sử OCR")
+            act_ocr_history.setShortcut(QKeySequence("Ctrl+Shift+H"))
+            act_ocr_history.triggered.connect(self._toggle_ocr_history)
             btn_ocr = QToolButton(self)
             btn_ocr.setText("OCR ảnh")
             btn_ocr.setIcon(tool_icon("ocr"))
@@ -723,9 +761,135 @@ class EditorWindow(QMainWindow):
             btn_ocr.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             btn_ocr.clicked.connect(self._ocr_full_image)
             tb.addWidget(btn_ocr)
-            # Đăng ký shortcut cho OCR vùng chọn (action nằm trong menu, cần addAction vào window).
+            # Đăng ký shortcut cho OCR (action nằm trong menu, cần addAction vào window).
             self.addAction(act_ocr_full)
             self.addAction(act_ocr_region)
+            self.addAction(act_ocr_history)
+
+    # ---------- panel lịch sử OCR ----------
+    def _build_ocr_history_panel(self) -> None:
+        """Dock bên phải hiển thị lịch sử OCR cho ảnh đang mở."""
+        dock = QDockWidget("Lịch sử OCR", self)
+        dock.setObjectName("ocrDock")
+        dock.setAllowedAreas(Qt.RightDockWidgetArea)
+        dock.setFeatures(QDockWidget.DockWidgetClosable)
+
+        panel = QWidget()
+        panel.setObjectName("ocrPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        # Nội dung cuộn được chứa các entry OCR.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        container = QWidget()
+        self._ocr_entries_layout = QVBoxLayout(container)
+        self._ocr_entries_layout.setContentsMargins(0, 0, 0, 0)
+        self._ocr_entries_layout.setSpacing(8)
+        self._ocr_entries_layout.addStretch(1)
+        scroll.setWidget(container)
+        layout.addWidget(scroll, 1)
+
+        # Gợi ý rỗng.
+        self._ocr_empty_hint = QLabel("Chưa có kết quả OCR.\nNhấn OCR ảnh để bắt đầu.")
+        self._ocr_empty_hint.setObjectName("ocrEmptyHint")
+        self._ocr_empty_hint.setWordWrap(True)
+        self._ocr_empty_hint.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._ocr_empty_hint)
+
+        dock.setWidget(panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self._ocr_dock = dock
+        dock.hide()
+
+    def set_ocr_history(self, entries: list[dict]) -> None:
+        """Hiển thị danh sách lịch sử OCR (mới nhất trước).
+
+        entry = {"id": int, "text": str, "created_at": str}.
+        """
+        # Xoá entries cũ (giữ lại stretch ở cuối).
+        while self._ocr_entries_layout.count() > 1:
+            item = self._ocr_entries_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        for entry in entries:
+            card = self._make_ocr_card(entry)
+            # Chèn trước stretch.
+            self._ocr_entries_layout.insertWidget(
+                self._ocr_entries_layout.count() - 1, card
+            )
+
+        has_entries = len(entries) > 0
+        self._ocr_empty_hint.setVisible(not has_entries)
+        if has_entries:
+            self._ocr_dock.show()
+
+    def _make_ocr_card(self, entry: dict) -> QWidget:
+        """Tạo widget card cho một mục OCR."""
+        card = QWidget()
+        card.setObjectName("ocrEntry")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(8, 6, 8, 6)
+        cl.setSpacing(4)
+
+        # Dòng trên: timestamp + nút copy + xoá.
+        header = QHBoxLayout()
+        header.setSpacing(6)
+        ts_label = QLabel(self._format_ocr_time(entry["created_at"]))
+        ts_label.setObjectName("ocrTimestamp")
+        header.addWidget(ts_label)
+        header.addStretch()
+
+        btn_copy = QPushButton("Copy")
+        btn_copy.setFixedHeight(24)
+        text = entry["text"]
+        btn_copy.clicked.connect(
+            lambda _=False, t=text: (
+                QGuiApplication.clipboard().setText(t),
+                self._show_toast("Đã copy văn bản"),
+            )
+        )
+        header.addWidget(btn_copy)
+
+        btn_del = QPushButton("Xoá")
+        btn_del.setFixedHeight(24)
+        entry_id = entry["id"]
+        btn_del.clicked.connect(
+            lambda _=False, eid=entry_id: self.ocr_delete_requested.emit(eid)
+        )
+        header.addWidget(btn_del)
+        cl.addLayout(header)
+
+        # Nội dung text — hiện tối đa 6 dòng, nhấp sẽ mở rộng.
+        text_edit = QPlainTextEdit()
+        text_edit.setPlainText(text)
+        text_edit.setReadOnly(True)
+        text_edit.setMaximumHeight(120)
+        text_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        cl.addWidget(text_edit)
+
+        return card
+
+    @staticmethod
+    def _format_ocr_time(iso_str: str) -> str:
+        """Chuyển ISO timestamp sang định dạng đọc được."""
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(iso_str)
+            return dt.strftime("%d/%m/%Y %H:%M")
+        except (ValueError, TypeError):
+            return iso_str
+
+    def _add_ocr_entry_to_panel(self, entry: dict) -> None:
+        """Thêm một entry mới vào đầu panel (không cần tải lại toàn bộ)."""
+        card = self._make_ocr_card(entry)
+        self._ocr_entries_layout.insertWidget(0, card)
+        self._ocr_empty_hint.hide()
+        self._ocr_dock.show()
 
     # ---------- dải ảnh gần đây (filmstrip) ----------
     def _build_recent_dock(self) -> None:
@@ -1212,29 +1376,19 @@ class EditorWindow(QMainWindow):
         self.canvas.state.tool = Tool.OCR_REGION
         self._show_toast("Kéo chọn vùng cần OCR")
 
-    def show_ocr_result(self, text: str) -> None:
-        """Hiện hộp thoại chứa kết quả OCR để người dùng chọn và copy."""
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Kết quả OCR")
-        dlg.resize(500, 350)
-        layout = QVBoxLayout(dlg)
-        edit = QPlainTextEdit(dlg)
-        edit.setPlainText(text)
-        edit.setReadOnly(True)
-        layout.addWidget(edit)
-        btn_row = QHBoxLayout()
-        btn_copy = QPushButton("Copy tất cả")
-        btn_copy.clicked.connect(lambda: (
-            QGuiApplication.clipboard().setText(text),
-            self._show_toast("Đã copy văn bản"),
-        ))
-        btn_close = QPushButton("Đóng")
-        btn_close.clicked.connect(dlg.close)
-        btn_row.addStretch()
-        btn_row.addWidget(btn_copy)
-        btn_row.addWidget(btn_close)
-        layout.addLayout(btn_row)
-        dlg.show()
+    def _toggle_ocr_history(self) -> None:
+        """Bật/tắt panel lịch sử OCR."""
+        self._ocr_dock.setVisible(not self._ocr_dock.isVisible())
+
+    def show_ocr_result(self, text: str, entry: dict | None = None) -> None:
+        """Hiển thị kết quả OCR trong panel lịch sử (không popup).
+
+        entry chứa {"id", "text", "created_at"} nếu đã lưu vào DB.
+        Nếu entry=None (ảnh chưa lưu vào thư viện), chỉ hiện toast.
+        """
+        if entry is not None:
+            self._add_ocr_entry_to_panel(entry)
+        self._show_toast("OCR xong — đã copy văn bản")
 
     def _paste_clipboard(self) -> None:
         """Dán ảnh từ clipboard vào editor.

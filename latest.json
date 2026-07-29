@@ -1,5 +1,5 @@
 {
-  "version": "0.1.23",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.23.exe",
-  "notes": "Khôi phục cách OCR truyền đường dẫn ảnh cho Claude CLI (bản 0.1.22 đổi sang gửi ảnh qua stdin gây lỗi OCR). Giữ nguyên bản vá font chữ tiếng Việt: giải mã kết quả theo UTF-8 thay vì mã hoá mặc định của hệ thống."
+  "version": "0.1.24",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.24.exe",
+  "notes": "Thêm tính năng lịch sử OCR: mỗi ảnh trong editor giờ lưu lại tất cả kết quả OCR đã chạy. Panel \"Lịch sử OCR\" hiển thị bên phải editor, cho phép xem lại, copy từng kết quả hoặc xoá mục không cần — không cần OCR lại ảnh đã xử lý trước đó. Truy cập nhanh qua menu OCR hoặc phím tắt Ctrl+Shift+H."
 }

@@ -414,6 +414,8 @@ class AppController(QObject):
         self.editor.request_library.connect(self.show_library)
         # OCR ảnh bằng Claude CLI.
         self.editor.request_ocr.connect(self._run_ocr)
+        # Lịch sử OCR: xoá entry.
+        self.editor.ocr_delete_requested.connect(self._on_ocr_delete_entry)
 
         self.library_window = LibraryWindow(self.library)
         self.library_window.open_in_editor.connect(self._open_capture_in_editor)
@@ -772,6 +774,7 @@ class AppController(QObject):
         if self.config.get("open_editor_after_capture", True):
             self.editor.load_image(image, capture_id=cap.id)
             self._raise_editor()
+            self.editor.set_ocr_history([])
         else:
             self.tray.showMessage(APP_NAME, "Đã lưu ảnh vào thư viện.")
         self.library_window.refresh()
@@ -1049,6 +1052,7 @@ class AppController(QObject):
         else:
             cap = self.library.add_capture(image)
             self.editor.load_image(image, capture_id=cap.id)
+            self.editor.set_ocr_history([])
         self.library_window.refresh()
         self._refresh_editor_recents()
         self.tray.showMessage(APP_NAME, "Đã lưu vào thư viện.")
@@ -1064,6 +1068,7 @@ class AppController(QObject):
         self.editor.load_image(image, capture_id=capture_id)
         self._raise_editor()
         self._refresh_editor_recents()
+        self._load_ocr_history(capture_id)
 
     @Slot(int)
     def _on_delete_capture(self, capture_id: int) -> None:
@@ -1357,7 +1362,17 @@ class AppController(QObject):
             self.editor._show_toast("Không tìm thấy văn bản trong ảnh")
             return
         QGuiApplication.clipboard().setText(text)
-        self.editor.show_ocr_result(text)
+        cid = self.editor.current_capture_id
+        entry = None
+        if cid is not None:
+            from datetime import datetime
+            rid = self.library.add_ocr_result(cid, text)
+            entry = {
+                "id": rid,
+                "text": text,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        self.editor.show_ocr_result(text, entry=entry)
 
     @Slot(str)
     def _on_ocr_error(self, message: str) -> None:
@@ -1366,6 +1381,19 @@ class AppController(QObject):
     def _clear_ocr_thread(self) -> None:
         self._ocr_thread = None
         self._ocr_worker = None
+
+    def _load_ocr_history(self, capture_id: int) -> None:
+        """Tải lịch sử OCR cho ảnh và hiển thị trên editor."""
+        entries = self.library.get_ocr_history(capture_id)
+        self.editor.set_ocr_history(entries)
+
+    @Slot(int)
+    def _on_ocr_delete_entry(self, entry_id: int) -> None:
+        """Xoá một mục OCR và tải lại lịch sử."""
+        self.library.delete_ocr_entry(entry_id)
+        cid = self.editor.current_capture_id
+        if cid is not None:
+            self._load_ocr_history(cid)
 
     def shutdown(self) -> None:
         if self._hotkey_watchdog is not None:

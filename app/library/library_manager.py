@@ -73,6 +73,19 @@ class LibraryManager:
             self._conn.execute(
                 "ALTER TABLE captures ADD COLUMN duration REAL NOT NULL DEFAULT 0"
             )
+        # Bảng lịch sử OCR: mỗi lần chạy OCR cho 1 ảnh → 1 bản ghi.
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ocr_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                capture_id INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (capture_id) REFERENCES captures(id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
         self._conn.commit()
 
     # ---------- thêm / lưu ----------
@@ -189,6 +202,32 @@ class LibraryManager:
             media_type=row["media_type"] if "media_type" in keys else "image",
             duration=row["duration"] if "duration" in keys else 0.0,
         )
+
+    # ---------- OCR history ----------
+    def add_ocr_result(self, capture_id: int, text: str) -> int:
+        """Lưu kết quả OCR cho một ảnh, trả về id bản ghi."""
+        ts = datetime.now().isoformat(timespec="seconds")
+        cur = self._conn.execute(
+            "INSERT INTO ocr_history (capture_id, text, created_at) VALUES (?, ?, ?)",
+            (capture_id, text, ts),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def get_ocr_history(self, capture_id: int) -> list[dict]:
+        """Lấy danh sách OCR đã chạy cho capture_id, mới nhất trước."""
+        rows = self._conn.execute(
+            "SELECT id, text, created_at FROM ocr_history "
+            "WHERE capture_id=? ORDER BY datetime(created_at) DESC",
+            (capture_id,),
+        ).fetchall()
+        return [{"id": r["id"], "text": r["text"], "created_at": r["created_at"]}
+                for r in rows]
+
+    def delete_ocr_entry(self, entry_id: int) -> None:
+        """Xoá một bản ghi OCR theo id."""
+        self._conn.execute("DELETE FROM ocr_history WHERE id=?", (entry_id,))
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
