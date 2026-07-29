@@ -476,7 +476,7 @@ class AppController(QObject):
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
 
-        # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 4 giờ.
+        # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 30 phút.
         self._auto_check_done = False
         QTimer.singleShot(30_000, self._auto_check_for_updates)
 
@@ -616,10 +616,13 @@ class AppController(QObject):
         self._update_dialog = None
 
     # ---------- tự kiểm tra cập nhật ----------
-    _AUTO_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000  # 4 giờ
+    # 30 phút. Trước đây là 4 giờ — quá thưa so với nhịp phát hành hiện tại (auto-ship
+    # có thể ra 3–4 bản trong 1–2 giờ), nên người dùng thường lỡ hẳn thông báo: app chỉ
+    # kiểm tra 30s sau khởi động rồi im lặng suốt 4 tiếng.
+    _AUTO_CHECK_INTERVAL_MS = 30 * 60 * 1000  # 30 phút
 
     def _auto_check_for_updates(self) -> None:
-        """Kiểm tra cập nhật nền: lần đầu 30s sau khởi động, lặp mỗi 4 giờ."""
+        """Kiểm tra cập nhật nền: lần đầu 30s sau khởi động, lặp mỗi 30 phút."""
         if self._update_thread is not None:
             # Đang có 1 lần kiểm tra chạy → thử lại sau 1 phút.
             QTimer.singleShot(60_000, self._auto_check_for_updates)
@@ -1334,7 +1337,7 @@ class AppController(QObject):
             return
         from .ocr import OcrWorker
 
-        self.editor._show_toast("Đang nhận diện văn bản…")
+        self.editor.show_ocr_progress()
         thread = QThread(self)
         worker = OcrWorker(image)
         worker.moveToThread(thread)
@@ -1354,6 +1357,7 @@ class AppController(QObject):
     @Slot(str)
     def _on_ocr_finished(self, text: str) -> None:
         if not text:
+            self.editor.hide_ocr_progress()
             self.editor._show_toast("Không tìm thấy văn bản trong ảnh")
             return
         QGuiApplication.clipboard().setText(text)
@@ -1371,6 +1375,7 @@ class AppController(QObject):
 
     @Slot(str)
     def _on_ocr_error(self, message: str) -> None:
+        self.editor.hide_ocr_progress()
         self.editor._show_toast(f"OCR lỗi: {message}")
 
     def _clear_ocr_thread(self) -> None:

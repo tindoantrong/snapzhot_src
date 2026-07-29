@@ -287,6 +287,21 @@ QMenu::item:selected { background: #1E90FF; color: #FFFFFF; }
 #ocrPanel QPushButton:hover { background: #484C53; }
 #ocrPanel QPushButton:pressed { background: #2F3338; }
 #ocrEmptyHint { color: #9AA0A6; font-size: 13px; }
+#ocrProgress {
+    background: #2A3A4A;
+    border: 1px solid #1E90FF;
+    border-radius: 6px;
+}
+#ocrProgressLabel {
+    color: #7EC8FF;
+    font-size: 12px;
+    padding: 4px 0;
+}
+#ocrProgressDots {
+    color: #1E90FF;
+    font-size: 13px;
+    font-weight: bold;
+}
 """
 
 
@@ -891,6 +906,63 @@ class EditorWindow(QMainWindow):
         self._ocr_empty_hint.hide()
         self._ocr_dock.show()
 
+    # --- OCR progress indicator ---
+
+    def show_ocr_progress(self) -> None:
+        """Hiển thị card 'Đang nhận diện...' ở đầu panel OCR history."""
+        self.hide_ocr_progress()  # xoá card cũ nếu có
+
+        card = QWidget()
+        card.setObjectName("ocrProgress")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(10, 8, 10, 8)
+        cl.setSpacing(4)
+
+        header = QHBoxLayout()
+        header.setSpacing(6)
+        spinner_label = QLabel("⏳")
+        spinner_label.setFixedWidth(20)
+        header.addWidget(spinner_label)
+        status_label = QLabel("Đang nhận diện văn bản…")
+        status_label.setObjectName("ocrProgressLabel")
+        header.addWidget(status_label)
+        header.addStretch()
+        cl.addLayout(header)
+
+        dots_label = QLabel("●○○")
+        dots_label.setObjectName("ocrProgressDots")
+        dots_label.setAlignment(Qt.AlignCenter)
+        cl.addWidget(dots_label)
+
+        # Animate dots
+        self._ocr_dots_label = dots_label
+        self._ocr_dots_step = 0
+        self._ocr_dots_timer = QTimer(self)
+        self._ocr_dots_timer.timeout.connect(self._animate_ocr_dots)
+        self._ocr_dots_timer.start(500)
+
+        self._ocr_progress_card = card
+        self._ocr_entries_layout.insertWidget(0, card)
+        self._ocr_empty_hint.hide()
+        self._ocr_dock.show()
+
+    def _animate_ocr_dots(self) -> None:
+        """Cập nhật animation dots cho progress indicator."""
+        patterns = ["●○○", "●●○", "●●●", "○●●", "○○●", "○○○"]
+        self._ocr_dots_step = (self._ocr_dots_step + 1) % len(patterns)
+        if hasattr(self, "_ocr_dots_label") and self._ocr_dots_label:
+            self._ocr_dots_label.setText(patterns[self._ocr_dots_step])
+
+    def hide_ocr_progress(self) -> None:
+        """Xoá card progress indicator."""
+        if hasattr(self, "_ocr_dots_timer") and self._ocr_dots_timer:
+            self._ocr_dots_timer.stop()
+            self._ocr_dots_timer = None
+        self._ocr_dots_label = None
+        if hasattr(self, "_ocr_progress_card") and self._ocr_progress_card:
+            self._ocr_progress_card.deleteLater()
+            self._ocr_progress_card = None
+
     # ---------- dải ảnh gần đây (filmstrip) ----------
     def _build_recent_dock(self) -> None:
         """Dock dưới chứa dải thumbnail các ảnh gần đây để chuyển nhanh.
@@ -1386,6 +1458,7 @@ class EditorWindow(QMainWindow):
         entry chứa {"id", "text", "created_at"} nếu đã lưu vào DB.
         Nếu entry=None (ảnh chưa lưu vào thư viện), chỉ hiện toast.
         """
+        self.hide_ocr_progress()
         if entry is not None:
             self._add_ocr_entry_to_panel(entry)
         self._show_toast("OCR xong — đã copy văn bản")

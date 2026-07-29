@@ -1,5 +1,5 @@
 {
-  "version": "0.1.26",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.26.exe",
-  "notes": "Thêm tính năng copy ảnh bằng Ctrl+C ở màn hình thư viện; chọn ảnh rồi nhấn Ctrl+C để copy vào clipboard, sau đó có thể dán vào ứng dụng khác."
+  "version": "0.1.27",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.27.exe",
+  "notes": "Thêm hiệu ứng \"Đang nhận diện văn bản…\" vào panel Lịch sử OCR khi OCR đang xử lý, giúp người dùng biết trạng thái hiện tại. Sau khi OCR hoàn tất, kết quả tự động thay thế hiệu ứng chờ."
 }
