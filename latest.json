@@ -1,5 +1,5 @@
 {
-  "version": "0.1.24",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.24.exe",
-  "notes": "Thêm tính năng lịch sử OCR: mỗi ảnh trong editor giờ lưu lại tất cả kết quả OCR đã chạy. Panel \"Lịch sử OCR\" hiển thị bên phải editor, cho phép xem lại, copy từng kết quả hoặc xoá mục không cần — không cần OCR lại ảnh đã xử lý trước đó. Truy cập nhanh qua menu OCR hoặc phím tắt Ctrl+Shift+H."
+  "version": "0.1.25",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.25.exe",
+  "notes": "Sửa lỗi app tự ẩn khi chụp màn hình; giờ cửa sổ Editor và Library giữ nguyên khi chụp vùng, chụp toàn màn hình, chụp cửa sổ hoặc chụp hẹn giờ — cho phép chụp được chính màn hình app."
 }

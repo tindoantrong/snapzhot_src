@@ -672,14 +672,11 @@ class AppController(QObject):
     def capture_region(self) -> None:
         if self._hotkey_dialog_open:
             return  # Bỏ qua: dialog phím tắt đang mở, tránh kẹt screenshot mode
-        # Ẩn cửa sổ rồi mới hiện overlay (chờ một nhịp cho cửa sổ biến mất).
-        self._hide_app_windows()
-        QTimer.singleShot(180, self.region_selector.start)
+        self.region_selector.start()
 
     @Slot()
     def capture_fullscreen(self) -> None:
-        self._hide_app_windows()
-        QTimer.singleShot(180, self._do_fullscreen_capture)
+        self._do_fullscreen_capture()
 
     def _do_fullscreen_capture(self) -> None:
         image = capture_manager.capture_fullscreen()
@@ -696,8 +693,7 @@ class AppController(QObject):
                 APP_NAME, "Chụp cửa sổ cần pywin32 trên Windows."
             )
             return
-        self._hide_app_windows()
-        QTimer.singleShot(180, self.window_selector.start)
+        self.window_selector.start()
 
     @Slot(int)
     def capture_fullscreen_delayed(self, seconds: int | None = None) -> None:
@@ -707,7 +703,6 @@ class AppController(QObject):
         if seconds is None:
             seconds = int(self.config.get("capture_delay_seconds", 3))
         seconds = max(1, int(seconds))
-        self._hide_app_windows()
         self._delay_remaining = seconds
         self.countdown_overlay.show_count(seconds)
         self._delay_timer.start()
