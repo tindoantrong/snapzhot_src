@@ -26,23 +26,24 @@ def _ocr_with_claude(image_path: str) -> str:
 
     Raises subprocess.CalledProcessError hoặc FileNotFoundError nếu lỗi.
     """
-    # Dùng forward-slash cho path — Claude CLI trên Windows xử lý tốt hơn.
-    safe_path = image_path.replace("\\", "/")
     prompt = (
-        f"Read the image file at '{safe_path}' and extract ALL text from it. "
+        "Extract ALL text from this image. "
         "Return ONLY the extracted text, no explanations, no markdown formatting. "
         "If there is no text, return an empty string."
     )
+    with open(image_path, "rb") as f:
+        image_data = f.read()
     result = subprocess.run(
-        ["claude", "-p", prompt, "--allowedTools", "Read"],
+        ["claude", "-p", prompt],
+        input=image_data,
         capture_output=True,
-        text=True,
         timeout=120,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"claude exited with code {result.returncode}")
-    return result.stdout.strip()
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(stderr or f"claude exited with code {result.returncode}")
+    return result.stdout.decode("utf-8").strip()
 
 
 def ocr_image(image: QImage) -> str:
