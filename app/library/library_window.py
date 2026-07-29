@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME
+from ..common.update_banner import UpdateBanner
 from ..editor.tool_icons import tool_icon
 from .library_manager import THUMB_SIZE, Capture, LibraryManager
 
@@ -115,6 +116,10 @@ class LibraryWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
+
+        # Banner cập nhật (ẩn mặc định, controller sẽ hiện khi có bản mới).
+        self.update_banner = UpdateBanner()
+        root.addWidget(self.update_banner)
 
         # Thanh trên: tìm kiếm + nút làm mới.
         top = QHBoxLayout()

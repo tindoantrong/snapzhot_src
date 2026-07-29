@@ -1,5 +1,5 @@
 {
-  "version": "0.1.27",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.27.exe",
-  "notes": "Thêm hiệu ứng \"Đang nhận diện văn bản…\" vào panel Lịch sử OCR khi OCR đang xử lý, giúp người dùng biết trạng thái hiện tại. Sau khi OCR hoàn tất, kết quả tự động thay thế hiệu ứng chờ."
+  "version": "0.1.28",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.28.exe",
+  "notes": "Thêm banner thông báo cập nhật ở cả màn hình Thư viện và Editor; khi có phiên bản mới, banner tự hiện với nút \"Cập nhật ngay\" — nhấn vào sẽ tự động tải và cài đặt bản mới."
 }

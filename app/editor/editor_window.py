@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME
+from ..common.update_banner import UpdateBanner
 from .canvas import (
     STAMP_NAMES,
     Canvas,
@@ -334,7 +335,16 @@ class EditorWindow(QMainWindow):
         self.canvas = Canvas()
         # Nền canvas tối để ảnh nổi bật (API Qt công khai, không đụng canvas.py).
         self.canvas.setBackgroundBrush(QColor("#3A3D42"))
-        self.setCentralWidget(self.canvas)
+
+        # Bọc canvas + banner cập nhật trong container để banner nằm trên canvas.
+        central = QWidget()
+        _central_layout = QVBoxLayout(central)
+        _central_layout.setContentsMargins(0, 0, 0, 0)
+        _central_layout.setSpacing(0)
+        self.update_banner = UpdateBanner()
+        _central_layout.addWidget(self.update_banner)
+        _central_layout.addWidget(self.canvas, 1)
+        self.setCentralWidget(central)
 
         self._build_capture_toolbar()
         self._build_tool_toolbar()

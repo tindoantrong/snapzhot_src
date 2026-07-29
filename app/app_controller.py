@@ -607,6 +607,9 @@ class AppController(QObject):
         # Dialog có thể đã đóng khi kết quả về → bỏ qua an toàn.
         if self._update_dialog is not None:
             self._update_dialog.show_result(info)
+        # Cập nhật banner trên cả hai cửa sổ.
+        self.library_window.update_banner.show_update(info)
+        self.editor.update_banner.show_update(info)
 
     def _clear_update_thread(self) -> None:
         self._update_thread = None
@@ -644,9 +647,12 @@ class AppController(QObject):
 
     @Slot(object)
     def _on_auto_check_result(self, info) -> None:
-        """Nhận kết quả auto-check: hiển thị tray notification nếu có bản mới."""
-        # Lên lịch kiểm tra lại sau 4 giờ (bất kể kết quả).
+        """Nhận kết quả auto-check: hiển thị banner + tray notification nếu có bản mới."""
+        # Lên lịch kiểm tra lại (bất kể kết quả).
         QTimer.singleShot(self._AUTO_CHECK_INTERVAL_MS, self._auto_check_for_updates)
+        # Hiện banner cập nhật trên cả thư viện và editor.
+        self.library_window.update_banner.show_update(info)
+        self.editor.update_banner.show_update(info)
         if not info.available:
             return
         self.tray.showMessage(
