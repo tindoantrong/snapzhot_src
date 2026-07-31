@@ -956,18 +956,24 @@ class Canvas(QGraphicsView):
 
     # ---------- xuất ảnh ----------
     def render_to_image(self) -> QImage:
-        """Gộp ảnh nền + mọi chú thích thành QImage để lưu."""
+        """Gộp ảnh nền + mọi chú thích + overlay dán thành QImage để lưu/copy."""
         # Thoát soạn chữ (nếu đang gõ) → kích hoạt auto-cleanup item rỗng.
         fi = self._scene.focusItem()
         if fi is not None:
             fi.clearFocus()
-        rect = self._scene.sceneRect()
+        # Bỏ chọn trước → ẩn handle resize (tránh render các ô vuông vào ảnh).
+        self._scene.clearSelection()
+        # Tính vùng render = sceneRect ∪ bounding của mọi annotation (trừ handle).
+        rect = QRectF(self._scene.sceneRect())
+        for it in self._scene.items():
+            if isinstance(it, ResizeHandle) or it is self._bg_item:
+                continue
+            rect = rect.united(it.sceneBoundingRect())
         image = QImage(int(rect.width()), int(rect.height()),
                        QImage.Format_ARGB32)
         image.fill(Qt.white)
         painter = QPainter(image)
         painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
-        self._scene.clearSelection()
         self._scene.render(painter, QRectF(image.rect()), rect)
         painter.end()
         return image

@@ -1440,7 +1440,11 @@ class EditorWindow(QMainWindow):
     def _copy_clipboard(self) -> None:
         if not self.canvas.has_image():
             return
-        QGuiApplication.clipboard().setImage(self.canvas.render_to_image())
+        img = self.canvas.render_to_image()
+        # Chuyển sang RGB32 (bỏ alpha) → clipboard Windows tương thích tốt hơn
+        # với mọi ứng dụng nhận (một số app bỏ qua layer alpha, mất overlay).
+        clipboard_img = img.convertToFormat(QImage.Format_RGB32)
+        QGuiApplication.clipboard().setImage(clipboard_img)
         self._show_toast("Đã copy vào clipboard")
 
     def _ocr_full_image(self) -> None:

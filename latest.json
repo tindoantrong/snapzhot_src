@@ -1,5 +1,5 @@
 {
-  "version": "0.1.28",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.28.exe",
-  "notes": "Thêm banner thông báo cập nhật ở cả màn hình Thư viện và Editor; khi có phiên bản mới, banner tự hiện với nút \"Cập nhật ngay\" — nhấn vào sẽ tự động tải và cài đặt bản mới."
+  "version": "0.1.29",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.29.exe",
+  "notes": "Sửa lỗi Copy ảnh chỉ lấy ảnh gốc mà thiếu ảnh đã dán/chú thích phía trên. Giờ Copy (Ctrl+C) sẽ gộp đầy đủ ảnh nền, overlay đã dán, và mọi chú thích vào clipboard."
 }
