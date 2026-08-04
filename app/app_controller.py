@@ -425,6 +425,7 @@ class AppController(QObject):
 
         self.region_selector = RegionSelector()
         self.region_selector.region_selected.connect(self._on_region_selected)
+        self.region_selector.image_captured.connect(self._handle_new_capture)
 
         # Chụp theo cửa sổ (Windows + pywin32). Dùng chung luồng với chụp vùng.
         self.window_selector = WindowSelector()
@@ -433,6 +434,7 @@ class AppController(QObject):
         # Chụp hẹn giờ: overlay đếm ngược + bộ đếm 1 giây.
         self.countdown_overlay = CountdownOverlay()
         self._delay_remaining = 0
+        self._delay_target: str = "fullscreen"  # "fullscreen" hoặc "region"
         self._delay_timer = QTimer(self)
         self._delay_timer.setInterval(1000)
         self._delay_timer.timeout.connect(self._on_delay_tick)
@@ -501,6 +503,11 @@ class AppController(QObject):
         for sec in sorted({default_delay, 3, 5}):
             act = QAction(f"Chụp toàn màn hình sau {sec} giây", self)
             act.triggered.connect(lambda _=False, s=sec: self.capture_fullscreen_delayed(s))
+            delay_menu.addAction(act)
+        delay_menu.addSeparator()
+        for sec in sorted({default_delay, 3, 5}):
+            act = QAction(f"Chụp vùng chọn sau {sec} giây", self)
+            act.triggered.connect(lambda _=False, s=sec: self.capture_region_delayed(s))
             delay_menu.addAction(act)
         menu.addSeparator()
 
@@ -681,7 +688,21 @@ class AppController(QObject):
     def capture_region(self) -> None:
         if self._hotkey_dialog_open:
             return  # Bỏ qua: dialog phím tắt đang mở, tránh kẹt screenshot mode
-        self.region_selector.start()
+        # Ẩn cửa sổ app trước nếu đang hiện, chờ 150ms để OS vẽ lại.
+        if self.library_window.isVisible() or self.editor.isVisible():
+            self._hide_app_windows()
+            QTimer.singleShot(150, self._start_frozen_region)
+        else:
+            self._start_frozen_region()
+
+    def _start_frozen_region(self) -> None:
+        """Chụp đóng băng toàn màn hình rồi hiện overlay chọn vùng trên ảnh đó.
+
+        Giải quyết bug: menu xổ ra (dropdown) trên web bị đóng khi overlay lấy focus.
+        Ảnh được chụp TRƯỚC KHI overlay hiện → trạng thái màn hình được giữ nguyên.
+        """
+        frozen = capture_manager.capture_fullscreen()
+        self.region_selector.start(frozen_bg=frozen)
 
     @Slot()
     def capture_fullscreen(self) -> None:
@@ -707,12 +728,20 @@ class AppController(QObject):
     @Slot(int)
     def capture_fullscreen_delayed(self, seconds: int | None = None) -> None:
         """Chụp toàn màn hình sau N giây, kèm overlay đếm ngược."""
+        self._capture_delayed(seconds, target="fullscreen")
+
+    def capture_region_delayed(self, seconds: int | None = None) -> None:
+        """Đếm ngược N giây rồi đóng băng + chọn vùng (giữ nguyên menu xổ ra)."""
+        self._capture_delayed(seconds, target="region")
+
+    def _capture_delayed(self, seconds: int | None, target: str) -> None:
         if self._delay_timer.isActive():
             return  # đang đếm ngược -> bỏ qua yêu cầu chồng
         if seconds is None:
             seconds = int(self.config.get("capture_delay_seconds", 3))
         seconds = max(1, int(seconds))
         self._delay_remaining = seconds
+        self._delay_target = target
         self.countdown_overlay.show_count(seconds)
         self._delay_timer.start()
         self._register_escape()
@@ -723,7 +752,10 @@ class AppController(QObject):
             self._delay_timer.stop()
             self._unregister_escape()
             self.countdown_overlay.hide()
-            self._do_fullscreen_capture()
+            if self._delay_target == "region":
+                self._start_frozen_region()
+            else:
+                self._do_fullscreen_capture()
         else:
             self.countdown_overlay.show_count(self._delay_remaining)
 

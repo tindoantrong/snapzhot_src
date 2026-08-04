@@ -1,4 +1,4 @@
 """snapzhot - phần mềm chụp màn hình, thư viện và vẽ chú thích (Snagit-clone)."""
 
-__version__ = "0.1.29"
+__version__ = "0.1.30"
 APP_NAME = "snapzhot"

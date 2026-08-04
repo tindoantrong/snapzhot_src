@@ -3,16 +3,22 @@ người dùng kéo chuột để chọn hình chữ nhật.
 
 Phát signal region_selected(QRect) với toạ độ MÀN HÌNH ẢO khi chọn xong,
 hoặc cancelled() khi nhấn Esc / chuột phải.
+
+Chế độ đóng băng (frozen_bg): nếu start() nhận một QImage chụp toàn màn hình,
+overlay hiển thị ảnh đó thay vì nền trong suốt. Khi chọn xong, cắt vùng từ ảnh
+đóng băng và phát image_captured(QImage) — không chụp lại màn hình thật.
+Giải quyết bug: menu xổ ra trên web bị đóng khi overlay lấy focus.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 
 class RegionSelector(QWidget):
-    region_selected = Signal(QRect)   # QRect theo toạ độ màn hình ảo
+    region_selected = Signal(QRect)   # QRect theo toạ độ màn hình ảo (chế độ thường)
+    image_captured = Signal(QImage)   # ảnh đã cắt (chế độ đóng băng)
     cancelled = Signal()
 
     def __init__(self) -> None:
@@ -28,6 +34,8 @@ class RegionSelector(QWidget):
         self._origin: QPoint | None = None
         self._current: QPoint | None = None
         self._dragging = False
+        self._frozen_image: QImage | None = None   # ảnh gốc (để cắt)
+        self._frozen_pixmap: QPixmap | None = None  # pixmap (để vẽ nhanh)
 
         # Phủ toàn bộ vùng ảo (gộp mọi màn hình).
         geo = QRect()
@@ -36,10 +44,16 @@ class RegionSelector(QWidget):
         self._virtual_origin = geo.topLeft()
         self.setGeometry(geo)
 
-    def start(self) -> None:
+    def start(self, frozen_bg: QImage | None = None) -> None:
         self._origin = None
         self._current = None
         self._dragging = False
+        if frozen_bg is not None:
+            self._frozen_image = frozen_bg
+            self._frozen_pixmap = QPixmap.fromImage(frozen_bg)
+        else:
+            self._frozen_image = None
+            self._frozen_pixmap = None
         self.showFullScreen()
         self.raise_()
         self.activateWindow()
@@ -68,16 +82,37 @@ class RegionSelector(QWidget):
         if rect.width() < 3 or rect.height() < 3:
             self._finish_cancel()
             return
-        # Đổi toạ độ widget -> toạ độ màn hình ảo.
-        virtual = rect.translated(self._virtual_origin)
-        self.hide()
-        self.region_selected.emit(virtual)
+
+        if self._frozen_image is not None:
+            # Chế độ đóng băng: cắt vùng từ ảnh đã chụp sẵn.
+            # Widget coords → image coords (xử lý DPI: image có thể lớn hơn widget).
+            img_w = self._frozen_image.width()
+            img_h = self._frozen_image.height()
+            wid_w = max(self.width(), 1)
+            wid_h = max(self.height(), 1)
+            sx = img_w / wid_w
+            sy = img_h / wid_h
+            cropped = self._frozen_image.copy(
+                int(rect.x() * sx), int(rect.y() * sy),
+                int(rect.width() * sx), int(rect.height() * sy),
+            )
+            self._frozen_image = None
+            self._frozen_pixmap = None
+            self.hide()
+            self.image_captured.emit(cropped)
+        else:
+            # Chế độ thường: phát toạ độ màn hình ảo để chụp live.
+            virtual = rect.translated(self._virtual_origin)
+            self.hide()
+            self.region_selected.emit(virtual)
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Escape:
             self._finish_cancel()
 
     def _finish_cancel(self) -> None:
+        self._frozen_image = None
+        self._frozen_pixmap = None
         self.hide()
         self.cancelled.emit()
 
@@ -90,22 +125,29 @@ class RegionSelector(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         sel = self._selection_rect()
-
-        # Phủ một lớp tối mờ lên TOÀN overlay. Bắt buộc: cửa sổ layered trong
-        # suốt hoàn toàn trên Windows sẽ bị "click-through" (chuột xuyên xuống
-        # cửa sổ dưới) -> overlay như không hiện và không kéo chọn được.
         overlay_color = QColor(0, 0, 0, 70)
 
-        if sel.isNull():
-            # Chưa kéo: phủ tối toàn bộ để overlay hữu hình và nhận được chuột.
+        if self._frozen_pixmap is not None:
+            # Chế độ đóng băng: vẽ ảnh chụp sẵn làm nền.
+            painter.drawPixmap(self.rect(), self._frozen_pixmap)
+            if sel.isNull():
+                painter.fillRect(self.rect(), overlay_color)
+                return
+            # Phủ tối 4 dải xung quanh vùng chọn, giữ vùng chọn sáng rõ.
+            w, h = self.width(), self.height()
+            painter.fillRect(0, 0, w, sel.top(), overlay_color)
+            painter.fillRect(0, sel.bottom() + 1, w, h - sel.bottom() - 1, overlay_color)
+            painter.fillRect(0, sel.top(), sel.left(), sel.height(), overlay_color)
+            painter.fillRect(sel.right() + 1, sel.top(), w - sel.right() - 1, sel.height(), overlay_color)
+        else:
+            # Chế độ thường: overlay trong suốt, khoét vùng chọn.
+            if sel.isNull():
+                painter.fillRect(self.rect(), overlay_color)
+                return
             painter.fillRect(self.rect(), overlay_color)
-            return
-
-        # Phủ tối toàn overlay rồi khoét trong suốt đúng vùng chọn (sáng rõ).
-        painter.fillRect(self.rect(), overlay_color)
-        painter.setCompositionMode(QPainter.CompositionMode_Clear)
-        painter.fillRect(sel, Qt.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+            painter.setCompositionMode(QPainter.CompositionMode_Clear)
+            painter.fillRect(sel, Qt.transparent)
+            painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
         # Viền gạch gạch quanh vùng chọn.
         pen = QPen(QColor("#1E90FF"), 2, Qt.DashLine)

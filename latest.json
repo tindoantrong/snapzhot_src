@@ -1,5 +1,5 @@
 {
-  "version": "0.1.29",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.29.exe",
-  "notes": "Sửa lỗi Copy ảnh chỉ lấy ảnh gốc mà thiếu ảnh đã dán/chú thích phía trên. Giờ Copy (Ctrl+C) sẽ gộp đầy đủ ảnh nền, overlay đã dán, và mọi chú thích vào clipboard."
+  "version": "0.1.30",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.30.exe",
+  "notes": "Thêm chế độ \"đóng băng màn hình\" khi chụp vùng chọn: ảnh được chụp ngay lập tức trước khi hiện khung chọn, giữ nguyên trạng thái màn hình (menu xổ ra, tooltip, v.v.). Thêm tuỳ chọn \"Chụp vùng chọn sau N giây\" trong menu hẹn giờ để chụp menu xổ ra qua tray menu."
 }
