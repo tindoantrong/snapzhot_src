@@ -1,5 +1,5 @@
 {
-  "version": "0.1.30",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.30.exe",
-  "notes": "Thêm chế độ \"đóng băng màn hình\" khi chụp vùng chọn: ảnh được chụp ngay lập tức trước khi hiện khung chọn, giữ nguyên trạng thái màn hình (menu xổ ra, tooltip, v.v.). Thêm tuỳ chọn \"Chụp vùng chọn sau N giây\" trong menu hẹn giờ để chụp menu xổ ra qua tray menu."
+  "version": "0.1.31",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.31.exe",
+  "notes": "Sửa lỗi Ctrl+C không copy được chữ đã OCR trong panel lịch sử; giờ khi quét chọn văn bản OCR rồi nhấn Ctrl+C sẽ copy chữ, không quét thì vẫn copy hình như bình thường."
 }

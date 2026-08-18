@@ -23,6 +23,7 @@ from PySide6.QtGui import (
     QPixmap,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QColorDialog,
     QDockWidget,
@@ -1438,6 +1439,16 @@ class EditorWindow(QMainWindow):
                 self._show_toast(f"Đã xuất: {os.path.basename(path)}")
 
     def _copy_clipboard(self) -> None:
+        # Nếu focus đang ở QPlainTextEdit trong panel OCR và có text đang chọn
+        # → copy text thay vì copy hình.
+        focused = QApplication.focusWidget()
+        if isinstance(focused, QPlainTextEdit) and focused.isReadOnly():
+            sel = focused.textCursor().selectedText()
+            if sel:
+                QGuiApplication.clipboard().setText(sel)
+                self._show_toast("Đã copy văn bản")
+                return
+
         if not self.canvas.has_image():
             return
         img = self.canvas.render_to_image()
