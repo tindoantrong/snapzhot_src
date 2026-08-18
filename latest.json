@@ -1,5 +1,5 @@
 {
-  "version": "0.1.32",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.32.exe",
-  "notes": "Sửa lỗi đẩy release lên GitHub thất bại khi bản nháp (draft) cùng phiên bản đã tồn tại; giờ pipeline tự xoá draft cũ và tạo lại release đầy đủ."
+  "version": "0.1.33",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.33.exe",
+  "notes": "Sửa lỗi đẩy release lên GitHub bị timeout khi upload file cài đặt (~133MB); giờ pipeline tách riêng bước tạo release và upload file, tự thử lại tối đa 3 lần nếu upload thất bại."
 }

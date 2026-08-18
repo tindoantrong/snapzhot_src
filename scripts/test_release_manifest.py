@@ -107,7 +107,7 @@ finally:
 
 
 # -----------------------------------------------------------------------
-# 7. build_gh_command: argv đúng cấu trúc
+# 7. build_gh_command: argv đúng cấu trúc (không kèm asset — upload riêng)
 # -----------------------------------------------------------------------
 fake_exe = f"dist/SnagTin-Setup-{__version__}.exe"
 fake_manifest = "latest.json"
@@ -122,10 +122,11 @@ _repo_idx = argv.index("--repo")
 assert argv[_repo_idx + 1] == _REPO, (
     f"giá trị sau --repo phải là {_REPO!r}, got: {argv[_repo_idx + 1]!r}"
 )
-assert fake_exe in argv, f"đường dẫn setup exe phải có trong argv: {fake_exe!r}"
-assert fake_manifest in argv, f"đường dẫn manifest phải có trong argv: {fake_manifest!r}"
+# Asset không nằm trong argv nữa (upload riêng qua gh release upload để tránh timeout)
+assert fake_exe not in argv, "exe không nên nằm trong argv create (upload riêng)"
+assert fake_manifest not in argv, "manifest không nên nằm trong argv create (upload riêng)"
 print(f"OK: build_gh_command trả đúng argv (gh release create v{__version__}, repo={_REPO})")
-print(f"    2 asset: {fake_exe!r}, {fake_manifest!r}")
+print(f"    Không kèm asset (upload riêng sau)")
 
 
 # -----------------------------------------------------------------------

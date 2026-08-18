@@ -35,7 +35,7 @@ def expected_release_assets(version: str, setup_exe_path: str, manifest_path: st
 
 
 def build_gh_command(version: str, setup_exe_path: str, manifest_path: str) -> list[str]:
-    """Trả về argv cho `gh release create`. Hàm thuần — không chạy gì."""
+    """Trả về argv cho `gh release create` (KHÔNG kèm asset — upload riêng sau)."""
     notes = ""
     if os.path.exists(manifest_path):
         try:
@@ -49,8 +49,6 @@ def build_gh_command(version: str, setup_exe_path: str, manifest_path: str) -> l
         "--repo", _REPO,
         "--title", f"SnagTin v{version}",
         "--notes", notes,
-        setup_exe_path,
-        manifest_path,
     ]
 
 
@@ -175,13 +173,34 @@ def main() -> int:
                 cwd=ROOT
             )
 
-        # Chạy gh release create
+        # Chạy gh release create (không kèm asset — upload riêng để tránh timeout)
         cmd = build_gh_command(ver, setup_exe, MANIFEST_PATH)
-        print(f"[publish] Chạy: gh release create v{ver} ...")
+        print(f"[publish] Chạy: gh release create v{ver} (không asset) ...")
         ret = subprocess.run(cmd, cwd=ROOT).returncode
         if ret != 0:
             print(f"\nLỖI: gh release create trả về code {ret}.")
             return ret
+
+        # Upload từng asset riêng (exe ~133MB dễ bị timeout nếu gộp chung)
+        assets_to_upload = [MANIFEST_PATH, setup_exe]  # nhỏ trước, lớn sau
+        for asset_path in assets_to_upload:
+            asset_name = os.path.basename(asset_path)
+            upload_ok = False
+            for attempt in range(1, 4):  # tối đa 3 lần thử
+                print(f"[publish] Upload {asset_name} (lần {attempt}/3) ...")
+                up = subprocess.run(
+                    ["gh", "release", "upload", f"v{ver}",
+                     asset_path, "--repo", _REPO, "--clobber"],
+                    cwd=ROOT,
+                )
+                if up.returncode == 0:
+                    upload_ok = True
+                    print(f"[publish] ✓ {asset_name} upload thành công.")
+                    break
+                print(f"[publish] Upload {asset_name} thất bại (code {up.returncode}), thử lại...")
+            if not upload_ok:
+                print(f"\nLỖI: Không upload được {asset_name} sau 3 lần thử.")
+                return 1
 
         # Verify asset sau publish
         verify = subprocess.run(
@@ -194,9 +213,6 @@ def main() -> int:
         missing = expected - actual
         if missing:
             print(f"\nCẢNH BÁO: release v{ver} thiếu asset: {', '.join(sorted(missing))}")
-            for name in sorted(missing):
-                src = setup_exe if name == os.path.basename(setup_exe) else MANIFEST_PATH
-                print(f"  gh release upload v{ver} {src} --repo {_REPO} --clobber")
             return 1
         print(f"\nVerify OK: release v{ver} có đủ {len(expected)} asset.")
         print(f"Đã publish release v{ver} lên github.com/{_REPO}")
