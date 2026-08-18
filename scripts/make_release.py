@@ -161,6 +161,20 @@ def main() -> int:
             print("  gh auth login --hostname github.com --git-protocol https --web")
             return 1
 
+        # Xoá draft release cũ nếu tồn tại (tránh lỗi "already exists")
+        check_existing = subprocess.run(
+            ["gh", "release", "view", f"v{ver}",
+             "--repo", _REPO, "--json", "isDraft", "--jq", ".isDraft"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        if check_existing.returncode == 0 and check_existing.stdout.strip() == "true":
+            print(f"[publish] Xoá draft release v{ver} cũ...")
+            subprocess.run(
+                ["gh", "release", "delete", f"v{ver}",
+                 "--repo", _REPO, "--yes", "--cleanup-tag"],
+                cwd=ROOT
+            )
+
         # Chạy gh release create
         cmd = build_gh_command(ver, setup_exe, MANIFEST_PATH)
         print(f"[publish] Chạy: gh release create v{ver} ...")

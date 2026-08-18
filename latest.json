@@ -1,5 +1,5 @@
 {
-  "version": "0.1.31",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.31.exe",
-  "notes": "Sửa lỗi Ctrl+C không copy được chữ đã OCR trong panel lịch sử; giờ khi quét chọn văn bản OCR rồi nhấn Ctrl+C sẽ copy chữ, không quét thì vẫn copy hình như bình thường."
+  "version": "0.1.32",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.32.exe",
+  "notes": "Sửa lỗi đẩy release lên GitHub thất bại khi bản nháp (draft) cùng phiên bản đã tồn tại; giờ pipeline tự xoá draft cũ và tạo lại release đầy đủ."
 }
