@@ -34,8 +34,14 @@ def expected_release_assets(version: str, setup_exe_path: str, manifest_path: st
     return {os.path.basename(setup_exe_path), os.path.basename(manifest_path)}
 
 
-def build_gh_command(version: str, setup_exe_path: str, manifest_path: str) -> list[str]:
-    """Trả về argv cho `gh release create` (KHÔNG kèm asset — upload riêng sau)."""
+def build_gh_command(version: str, setup_exe_path: str, manifest_path: str,
+                     target: str | None = None) -> list[str]:
+    """Trả về argv cho `gh release create` (KHÔNG kèm asset — upload riêng sau).
+
+    ``target``: branch hoặc commit SHA để tag vào. BẮT BUỘC truyền khi release
+    thật — không có nó GitHub tag vào default branch (``main``), nhánh đang đóng
+    băng ở v0.1.4, khiến tag và source tarball của mọi release đều trỏ sai code.
+    """
     notes = ""
     if os.path.exists(manifest_path):
         try:
@@ -43,13 +49,42 @@ def build_gh_command(version: str, setup_exe_path: str, manifest_path: str) -> l
                 notes = str(json.load(f).get("notes", "")).strip()
         except Exception:
             pass
-    return [
+    cmd = [
         "gh", "release", "create",
         f"v{version}",
         "--repo", _REPO,
         "--title", f"SnagTin v{version}",
         "--notes", notes,
     ]
+    if target:
+        cmd += ["--target", target]
+    return cmd
+
+
+def resolve_release_target() -> str | None:
+    """SHA của HEAD — chỉ trả về nếu commit đó đã có trên remote.
+
+    Tag phải trỏ đúng commit vừa build. Commit chưa push thì GitHub không biết
+    nó, phải chặn ngay thay vì để tag rơi nhầm sang nhánh khác.
+    """
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        capture_output=True, text=True, cwd=ROOT,
+    )
+    if head.returncode != 0:
+        print("LỖI: không chạy được `git rev-parse HEAD` — không biết tag vào commit nào.")
+        return None
+    sha = head.stdout.strip()
+
+    unpushed = subprocess.run(
+        ["git", "rev-list", "--max-count=1", sha, "--not", "--remotes"],
+        capture_output=True, text=True, cwd=ROOT,
+    )
+    if unpushed.returncode == 0 and unpushed.stdout.strip():
+        print(f"LỖI: commit {sha[:7]} chưa push lên remote — GitHub không tag vào đó được.")
+        print("     Chạy `git push` rồi release lại.")
+        return None
+    return sha
 
 
 def build_manifest(version: str, notes: str) -> dict:
@@ -173,9 +208,15 @@ def main() -> int:
                 cwd=ROOT
             )
 
+        # Xác định commit để tag — không truyền thì GitHub tag vào default
+        # branch (main, đang đóng băng ở v0.1.4) chứ không phải code vừa build.
+        target = resolve_release_target()
+        if target is None:
+            return 1
+
         # Chạy gh release create (không kèm asset — upload riêng để tránh timeout)
-        cmd = build_gh_command(ver, setup_exe, MANIFEST_PATH)
-        print(f"[publish] Chạy: gh release create v{ver} (không asset) ...")
+        cmd = build_gh_command(ver, setup_exe, MANIFEST_PATH, target=target)
+        print(f"[publish] Chạy: gh release create v{ver} (không asset, target={target[:7]}) ...")
         ret = subprocess.run(cmd, cwd=ROOT).returncode
         if ret != 0:
             print(f"\nLỖI: gh release create trả về code {ret}.")
@@ -202,19 +243,37 @@ def main() -> int:
                 print(f"\nLỖI: Không upload được {asset_name} sau 3 lần thử.")
                 return 1
 
-        # Verify asset sau publish
+        # Verify sau publish: đủ asset VÀ đã thoát khỏi trạng thái draft.
         verify = subprocess.run(
             ["gh", "release", "view", f"v{ver}",
-             "--repo", _REPO, "--json", "assets", "--jq", ".assets[].name"],
+             "--repo", _REPO, "--json", "isDraft,assets"],
             capture_output=True, text=True, cwd=ROOT
         )
-        actual = set(verify.stdout.strip().splitlines()) if verify.returncode == 0 else set()
+        actual: set[str] = set()
+        is_draft = False
+        if verify.returncode == 0:
+            try:
+                data = json.loads(verify.stdout)
+                actual = {a["name"] for a in data.get("assets", [])}
+                is_draft = bool(data.get("isDraft"))
+            except (ValueError, KeyError, TypeError):
+                print("CẢNH BÁO: không đọc được kết quả `gh release view`.")
+
         expected = expected_release_assets(ver, setup_exe, MANIFEST_PATH)
         missing = expected - actual
         if missing:
-            print(f"\nCẢNH BÁO: release v{ver} thiếu asset: {', '.join(sorted(missing))}")
+            print()
+            print(f"CẢNH BÁO: release v{ver} thiếu asset: {', '.join(sorted(missing))}")
             return 1
-        print(f"\nVerify OK: release v{ver} có đủ {len(expected)} asset.")
+        # Draft KHÔNG public: user không thấy bản này và `releases/latest` vẫn
+        # trỏ bản cũ — đúng lỗi làm 0.1.31 đến 0.1.33 kẹt suốt 3 tuần.
+        if is_draft:
+            print()
+            print(f"LỖI: release v{ver} vẫn ở trạng thái DRAFT — user không nhận được bản này.")
+            print(f"     Chạy: gh release edit v{ver} --repo {_REPO} --draft=false --latest")
+            return 1
+        print()
+        print(f"Verify OK: release v{ver} đủ {len(expected)} asset, đã public (không draft).")
         print(f"Đã publish release v{ver} lên github.com/{_REPO}")
     else:
         # Fallback: checklist thủ công

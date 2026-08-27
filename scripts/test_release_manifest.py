@@ -130,6 +130,30 @@ print(f"    Không kèm asset (upload riêng sau)")
 
 
 # -----------------------------------------------------------------------
+# 7b. build_gh_command: có --target thì tag đúng commit, không có thì thiếu
+#     (không truyền target => GitHub tag vào default branch `main`, đang đóng
+#      băng ở v0.1.4 => tag và source tarball của release trỏ sai code)
+# -----------------------------------------------------------------------
+argv_no_target = build_gh_command(__version__, fake_exe, fake_manifest)
+assert "--target" not in argv_no_target, (
+    "không truyền target thì argv không được có --target"
+)
+
+fake_sha = "7ed221d0f8e755b6da83655a7befc0f3bbb2d30e"
+argv_t = build_gh_command(__version__, fake_exe, fake_manifest, target=fake_sha)
+assert "--target" in argv_t, "truyền target thì argv phải có --target"
+_t_idx = argv_t.index("--target")
+assert argv_t[_t_idx + 1] == fake_sha, (
+    f"giá trị sau --target phải là {fake_sha!r}, got: {argv_t[_t_idx + 1]!r}"
+)
+assert fake_exe not in argv_t and fake_manifest not in argv_t, (
+    "asset vẫn không được nằm trong argv create"
+)
+print(f"OK: build_gh_command(target=...) sinh --target {fake_sha[:7]}")
+print( "    (thiếu --target => tag rơi vào default branch main, sai code)")
+
+
+# -----------------------------------------------------------------------
 # 8. expected_release_assets: trả đúng 2 basename
 # -----------------------------------------------------------------------
 fake_exe2 = f"dist/SnagTin-Setup-{__version__}.exe"
