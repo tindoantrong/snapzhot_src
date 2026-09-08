@@ -549,6 +549,9 @@ class EditorWindow(QMainWindow):
         )
         self._bg_cycle_action.triggered.connect(self._cycle_canvas_bg)
         tb.addAction(self._bg_cycle_action)
+        btn = tb.widgetForAction(self._bg_cycle_action)
+        if btn is not None:
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
         # Nút toggle ẩn/hiện panel Thuộc tính (props_dock được gán sau khi panel dựng).
         self._props_toggle_action = QAction("Thuộc tính", self)
@@ -556,11 +559,14 @@ class EditorWindow(QMainWindow):
         self._props_toggle_action.setChecked(True)
         self._props_toggle_action.setShortcut(QKeySequence("F4"))
         self._props_toggle_action.setIcon(tool_icon("panel_toggle"))
-        self._props_toggle_action.setToolTip("Hiện/ẩn panel thuộc tính (F4)")
+        self._props_toggle_action.setToolTip("Ẩn/hiện panel Thuộc tính (F4)")
         self._props_toggle_action.triggered.connect(
             lambda checked: self.props_dock.setVisible(checked)
         )
         tb.addAction(self._props_toggle_action)
+        btn = tb.widgetForAction(self._props_toggle_action)
+        if btn is not None:
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
     def _cycle_canvas_bg(self) -> None:
         """Cycle nền canvas: Tối → Trắng → Đen → ..."""

@@ -433,26 +433,27 @@ def _draw_ocr(painter: QPainter, rect: QRectF, color: QColor) -> None:
 
 
 def _draw_panel_toggle(painter, rect, color):
-    """Biểu tượng panel bên phải có thể ẩn/hiện (hình chữ nhật + đường dọc)."""
-    painter.drawRect(rect)
-    x = rect.left() + rect.width() * 0.62
-    painter.drawLine(_p(rect, 0.62, 0.0), _p(rect, 0.62, 1.0))
-    # Mũi tên > bên phải chỉ hướng ẩn/mở
-    painter.drawLine(_p(rect, 0.72, 0.35), _p(rect, 0.88, 0.50))
-    painter.drawLine(_p(rect, 0.88, 0.50), _p(rect, 0.72, 0.65))
+    """Sidebar collapse — khung cửa sổ chia đôi, chevron ‹ gợi thu gọn panel."""
+    painter.drawRoundedRect(rect, 1.5, 1.5)
+    # Đường dọc chia panel phải (~65%)
+    painter.drawLine(_p(rect, 0.65, 0.0), _p(rect, 0.65, 1.0))
+    # Chevron ‹ trong vùng panel phải → thu gọn
+    painter.drawLine(_p(rect, 0.82, 0.35), _p(rect, 0.72, 0.50))
+    painter.drawLine(_p(rect, 0.72, 0.50), _p(rect, 0.82, 0.65))
 
 
 def _draw_bg_cycle(painter, rect, color):
-    """Biểu tượng chuyển nền: hình tròn nửa sáng nửa tối."""
+    """Half-filled circle — nút chuyển theme sáng/tối (contrast icon)."""
     cx, cy = rect.center().x(), rect.center().y()
-    r = rect.width() * 0.38
-    # Đường kính chia đôi (đứng)
-    painter.drawLine(QPointF(cx, cy - r), QPointF(cx, cy + r))
-    # Vòng tròn ngoài
+    r = rect.width() * 0.42
+    # Tô nửa phải solid (top → right arc → bottom, close = đường kính)
+    path = QPainterPath()
+    path.moveTo(cx, cy - r)
+    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 90, -180)
+    path.closeSubpath()
+    painter.fillPath(path, QBrush(color))
+    # Viền tròn đầy đủ
     painter.drawEllipse(QPointF(cx, cy), r, r)
-    # Vài nét nhỏ phía trái (nền sáng, biểu tượng ánh sáng)
-    painter.drawLine(QPointF(cx - r * 0.45, cy - r * 0.45),
-                     QPointF(cx - r * 0.20, cy - r * 0.20))
 
 
 _DRAWERS = {
