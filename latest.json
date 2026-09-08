@@ -1,5 +1,5 @@
 {
-  "version": "0.1.34",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.34.exe",
-  "notes": "v0.1.34: 5 cải tiến editor (nút Copy góc phải, thu gọn panel Thuộc tính F4, thanh công cụ gọn + gộp Zoom, đổi nền canvas Tối/Trắng/Đen, nút X xoá nhanh ảnh gần đây) và hộp thoại Phím tắt khi khởi động (có tuỳ chọn không hiện lại)."
+  "version": "0.1.36",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.36.exe",
+  "notes": "v0.1.36: Nút thu gọn panel Thuộc tính chuyển vào ngay tiêu đề panel (chevron góc phải); thu gọn rồi vẫn còn tab nhỏ ở mép phải để mở lại, phím F4 giữ nguyên. Thanh công cụ trên bớt một nút, nút Nền được ngăn nhóm với zoom. Xoá ảnh trong 'Ảnh gần đây' bằng nút X nay phản hồi tức thì: thẻ ảnh biến mất ngay, phần xoá file chạy ở nền (trước đây đứng hình 0,15-0,3 giây với thư viện vài trăm ảnh); nếu xoá hỏng thì thẻ được trả lại kèm thông báo."
 }
