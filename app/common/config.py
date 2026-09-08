@@ -17,6 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "default_width": 6,                   # độ dày nét mặc định (pt)
     "run_in_background": True,            # giữ chạy nền ở khay hệ thống
     "start_on_boot": False,               # tự chạy khi Windows khởi động
+    "show_shortcuts_on_startup": True,    # hiện dialog phím tắt mỗi lần mở app
 }
 
 

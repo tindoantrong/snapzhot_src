@@ -545,6 +545,10 @@ class AppController(QObject):
         lib_act.triggered.connect(self.show_library)
         menu.addAction(lib_act)
 
+        shortcuts_act = QAction("Phím tắt…", self)
+        shortcuts_act.triggered.connect(self._open_shortcuts_dialog)
+        menu.addAction(shortcuts_act)
+
         ed_act = QAction("Mở Editor", self)
         ed_act.triggered.connect(self.editor.show)
         menu.addAction(ed_act)
@@ -576,6 +580,12 @@ class AppController(QObject):
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.Trigger:  # click trái
             self.show_library()
+
+    def _open_shortcuts_dialog(self) -> None:
+        """Mở dialog phím tắt (luôn mở được, kể cả khi đã tắt auto-startup)."""
+        from .common.shortcuts_dialog import ShortcutsDialog
+        dlg = ShortcutsDialog(parent=self.library_window)
+        dlg.exec()
 
     # ---------- cập nhật phiên bản ----------
     def _open_update_dialog(self) -> None:

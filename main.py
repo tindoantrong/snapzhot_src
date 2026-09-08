@@ -55,6 +55,13 @@ def main() -> int:
     controller.install_global_hotkeys()
     controller.show_library()  # mở thư viện lần đầu cho dễ thấy
 
+    # Dialog phím tắt chào mừng — chỉ hiện nếu user chưa tắt.
+    from app.common.config import load_config
+    from app.common.shortcuts_dialog import ShortcutsDialog, should_show_on_startup
+    if should_show_on_startup(load_config()):
+        _shortcuts_dlg = ShortcutsDialog(parent=controller.library_window)
+        _shortcuts_dlg.exec()
+
     app.aboutToQuit.connect(controller.shutdown)
     return app.exec()
 

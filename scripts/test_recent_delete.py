@@ -1,7 +1,7 @@
 """Test REC2: xoá ảnh từ dải 'Ảnh gần đây' trong Editor.
 
-(A) editor_window: confirm Yes→emit delete_capture_requested, No→không; phím Delete
-    trên recent_strip → đường xoá chạy (qua confirm).
+(A) editor_window: _request_delete_capture phát thẳng (không hỏi xác nhận); phím
+    Delete trên recent_strip → đường xoá chạy ngay.
 (B) app_controller._on_delete_capture với library giả: delete đúng id + refresh;
     xoá ảnh đang mở + còn ảnh → load ảnh mới nhất còn lại; xoá hết → không crash.
 """
@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QColor, QImage, QKeyEvent
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 
 # Mock `keyboard` trước khi import AppController (như test_escape).
 fake_kb = types.ModuleType("keyboard")
@@ -40,31 +40,25 @@ def items():
     ]
 
 
-# ===== (A) editor confirm + emit =====
+# ===== (A) editor xoá ngay (không confirm) =====
 def test_editor() -> None:
     w = EditorWindow()
     w.set_recent_captures(items())
     emitted = []
     w.delete_capture_requested.connect(lambda cid: emitted.append(cid))
 
-    # confirm No → KHÔNG emit
-    QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)
-    w._request_delete_capture(2)
-    assert emitted == [], emitted
-
-    # confirm Yes → emit đúng id
-    QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+    # _request_delete_capture phát thẳng tín hiệu, không hỏi xác nhận
     w._request_delete_capture(2)
     assert emitted == [2], emitted
 
-    # Phím Delete trên strip (currentItem id=3) → đường xoá chạy → emit 3
+    # Phím Delete trên strip (currentItem id=3) → đường xoá chạy ngay → emit 3
     w.load_image(img, capture_id=3)  # highlight id=3 thành currentItem
     assert w.recent_strip.currentItem().data(Qt.UserRole) == 3
     ev = QKeyEvent(QEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
     handled = w.eventFilter(w.recent_strip, ev)
     assert handled is True, "Delete trên strip phải được nuốt"
     assert emitted == [2, 3], emitted
-    print("OK: editor confirm No/Yes + phím Delete")
+    print("OK: editor xoá ngay không confirm + phím Delete")
 
 
 # ===== (B) controller _on_delete_capture =====

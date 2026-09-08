@@ -8,7 +8,7 @@ Bố cục mô phỏng Snagit:
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPropertyAnimation, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -35,13 +35,13 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QStyledItemDelegate,
     QToolBar,
     QToolButton,
     QVBoxLayout,
@@ -307,6 +307,49 @@ QMenu::item:selected { background: #1E90FF; color: #FFFFFF; }
 """
 
 
+# Các màu nền canvas cycle theo thứ tự: Tối → Trắng → Đen.
+_BG_COLORS = ("#3A3D42", "#FFFFFF", "#000000")
+_BG_LABELS = ("Tối", "Trắng", "Đen")
+
+
+class RecentItemDelegate(QStyledItemDelegate):
+    """Vẽ badge X ở góc phải-trên mỗi thumbnail trong dải ảnh gần đây.
+
+    Nhấp vào badge X xoá ảnh ngay (hit-test trong eventFilter).
+    """
+
+    BADGE_SIZE = 18
+    BADGE_MARGIN = 3
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        badge = self._badge_rect(option.rect)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        # Nền tròn tối mờ
+        painter.setBrush(QBrush(QColor(0, 0, 0, 160)))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(badge)
+        # Dấu X sáng
+        m = 5
+        painter.setPen(QPen(QColor("#FFFFFF"), 2.0, Qt.SolidLine, Qt.RoundCap))
+        painter.drawLine(badge.left() + m, badge.top() + m,
+                         badge.right() - m, badge.bottom() - m)
+        painter.drawLine(badge.right() - m, badge.top() + m,
+                         badge.left() + m, badge.bottom() - m)
+        painter.restore()
+
+    @classmethod
+    def _badge_rect(cls, item_rect: QRect) -> QRect:
+        s, mg = cls.BADGE_SIZE, cls.BADGE_MARGIN
+        return QRect(item_rect.right() - s - mg, item_rect.top() + mg, s, s)
+
+    @classmethod
+    def hit_badge(cls, pos, item_rect: QRect) -> bool:
+        """True nếu điểm pos nằm trong badge X."""
+        return cls._badge_rect(item_rect).contains(pos)
+
+
 class EditorWindow(QMainWindow):
     # Phát QImage khi người dùng muốn lưu vào thư viện.
     save_to_library = Signal(QImage)
@@ -407,7 +450,7 @@ class EditorWindow(QMainWindow):
         tb.setMovable(False)
         self.addToolBar(Qt.TopToolBarArea, tb)
 
-        tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        tb.setToolButtonStyle(Qt.ToolButtonIconOnly)
         tb.setIconSize(QSize(26, 26))
 
         # Hoàn tác / Làm lại nối với QUndoStack của canvas.
@@ -444,15 +487,31 @@ class EditorWindow(QMainWindow):
             tb.addAction(act)
             self._tool_actions[tool] = act
 
+        # Spacer co giãn đẩy Copy sang góc phải-trên toolbar.
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+
+        # Nút Copy nổi bật góc phải-trên (icon lớn hơn, hiện cả chữ).
+        copy_act = QAction("Copy", self)
+        copy_act.setIcon(tool_icon("copy"))
+        copy_act.setShortcuts([QKeySequence("Ctrl+C"), QKeySequence("Ctrl+Shift+C")])
+        copy_act.setToolTip("Copy ảnh vào clipboard (Ctrl+C)")
+        copy_act.triggered.connect(self._copy_clipboard)
+        tb.addAction(copy_act)
+        copy_btn = tb.widgetForAction(copy_act)
+        if copy_btn is not None:
+            copy_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            copy_btn.setIconSize(QSize(30, 30))
+
     # ---------- thanh zoom ----------
     def _build_zoom_toolbar(self) -> None:
         tb = QToolBar("Zoom")
         tb.setObjectName("zoomBar")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        # Xuống hàng riêng: không tranh chỗ với tool toolbar khi cửa sổ hẹp, nhờ đó
-        # nút overflow ">>" của tool toolbar luôn tới được (mọi tool truy cập được).
-        self.addToolBarBreak(Qt.TopToolBarArea)
+        # Chung hàng với tool toolbar: icon-only làm mỗi nút nhỏ hơn nên overflow ">>"
+        # vẫn hoạt động khi cửa sổ hẹp.
         self.addToolBar(Qt.TopToolBarArea, tb)
 
         for text, icon, slot, shortcut, tip in (
@@ -478,6 +537,37 @@ class EditorWindow(QMainWindow):
         self.zoom_label.setMinimumWidth(48)
         self.zoom_label.setAlignment(Qt.AlignCenter)
         tb.addWidget(self.zoom_label)
+
+        tb.addSeparator()
+
+        # Nút cycle nền canvas: Tối → Trắng → Đen → ...
+        self._bg_index = 0
+        self._bg_cycle_action = QAction("Nền", self)
+        self._bg_cycle_action.setIcon(tool_icon("bg_cycle"))
+        self._bg_cycle_action.setToolTip(
+            f"Nền canvas: {_BG_LABELS[0]} → bấm để đổi"
+        )
+        self._bg_cycle_action.triggered.connect(self._cycle_canvas_bg)
+        tb.addAction(self._bg_cycle_action)
+
+        # Nút toggle ẩn/hiện panel Thuộc tính (props_dock được gán sau khi panel dựng).
+        self._props_toggle_action = QAction("Thuộc tính", self)
+        self._props_toggle_action.setCheckable(True)
+        self._props_toggle_action.setChecked(True)
+        self._props_toggle_action.setShortcut(QKeySequence("F4"))
+        self._props_toggle_action.setIcon(tool_icon("panel_toggle"))
+        self._props_toggle_action.setToolTip("Hiện/ẩn panel thuộc tính (F4)")
+        self._props_toggle_action.triggered.connect(
+            lambda checked: self.props_dock.setVisible(checked)
+        )
+        tb.addAction(self._props_toggle_action)
+
+    def _cycle_canvas_bg(self) -> None:
+        """Cycle nền canvas: Tối → Trắng → Đen → ..."""
+        self._bg_index = (self._bg_index + 1) % 3
+        color, label = _BG_COLORS[self._bg_index], _BG_LABELS[self._bg_index]
+        self.canvas.setBackgroundBrush(QColor(color))
+        self._bg_cycle_action.setToolTip(f"Nền canvas: {label} → bấm để đổi")
 
     def _sync_zoom_label(self, percent: float) -> None:
         text = f"{round(percent)}%"
@@ -684,6 +774,7 @@ class EditorWindow(QMainWindow):
 
         dock.setWidget(panel)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
+        self.props_dock = dock  # tham chiếu để toggle từ action
         self._set_color(self.canvas.state.color)
 
     def _update_props_visibility(self, tool: Tool) -> None:
@@ -751,8 +842,6 @@ class EditorWindow(QMainWindow):
         for text, icon, slot, shortcut, tip in (
             ("Lưu vào thư viện", "save", self._save_to_library, "Ctrl+S", "Lưu ảnh vào thư viện"),
             ("Xuất ra file...", "export", self._export_file, "Ctrl+E", "Xuất ảnh ra file"),
-            # Copy nhận cả Ctrl+C lẫn Ctrl+Shift+C cho tiện tay.
-            ("Copy", "copy", self._copy_clipboard, ("Ctrl+C", "Ctrl+Shift+C"), "Copy ảnh vào clipboard"),
             ("Dán ảnh", "paste", self._paste_clipboard, "Ctrl+V", "Dán ảnh từ clipboard"),
         ):
             keys = [shortcut] if isinstance(shortcut, str) else list(shortcut)
@@ -1004,6 +1093,10 @@ class EditorWindow(QMainWindow):
         strip.setContextMenuPolicy(Qt.CustomContextMenu)
         strip.customContextMenuRequested.connect(self._on_recent_context_menu)
         strip.installEventFilter(self)
+        strip.viewport().installEventFilter(self)
+        # Delegate vẽ badge X góc phải-trên mỗi thumbnail.
+        self._recent_delegate = RecentItemDelegate()
+        strip.setItemDelegate(self._recent_delegate)
 
         self.recent_strip = strip
         self.recent_dock = dock
@@ -1071,13 +1164,8 @@ class EditorWindow(QMainWindow):
             self._request_delete_capture(int(cid))
 
     def _request_delete_capture(self, capture_id: int) -> None:
-        """Hỏi xác nhận (mặc định No) rồi phát yêu cầu xoá lên controller."""
-        reply = QMessageBox.question(
-            self, "Xoá ảnh", "Xoá ảnh này khỏi thư viện?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if reply == QMessageBox.Yes:
-            self.delete_capture_requested.emit(capture_id)
+        """Phát yêu cầu xoá lên controller (không hỏi xác nhận)."""
+        self.delete_capture_requested.emit(capture_id)
 
     # ---------- status bar ----------
     def _build_status_bar(self) -> None:
@@ -1178,6 +1266,20 @@ class EditorWindow(QMainWindow):
                 if cid is not None:
                     self._request_delete_capture(int(cid))
                 return True
+        # Nhấp chuột vào badge X trên viewport dải ảnh → xoá ngay, không mở ảnh.
+        _strip = getattr(self, "recent_strip", None)
+        if _strip is not None and obj is _strip.viewport() \
+                and event.type() == QEvent.MouseButtonPress \
+                and event.button() == Qt.LeftButton:
+            pos = event.position().toPoint()
+            item = _strip.itemAt(pos)
+            if item is not None:
+                item_rect = _strip.visualItemRect(item)
+                if self._recent_delegate.hit_badge(pos, item_rect):
+                    cid = item.data(Qt.UserRole)
+                    if cid is not None:
+                        self._request_delete_capture(int(cid))
+                    return True  # chặn click mở ảnh
         if obj is self.canvas.viewport() and event.type() in (
             QEvent.Resize, QEvent.Show,
         ):
