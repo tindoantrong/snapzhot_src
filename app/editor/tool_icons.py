@@ -432,14 +432,16 @@ def _draw_ocr(painter: QPainter, rect: QRectF, color: QColor) -> None:
     painter.drawLine(_p(rect, 0.38, 0.24), _p(rect, 0.38, 0.58))
 
 
-def _draw_panel_toggle(painter, rect, color):
-    """Sidebar collapse — khung cửa sổ chia đôi, chevron ‹ gợi thu gọn panel."""
-    painter.drawRoundedRect(rect, 1.5, 1.5)
-    # Đường dọc chia panel phải (~65%)
-    painter.drawLine(_p(rect, 0.65, 0.0), _p(rect, 0.65, 1.0))
-    # Chevron ‹ trong vùng panel phải → thu gọn
-    painter.drawLine(_p(rect, 0.82, 0.35), _p(rect, 0.72, 0.50))
-    painter.drawLine(_p(rect, 0.72, 0.50), _p(rect, 0.82, 0.65))
+def _draw_chevron_right(painter, rect, color):
+    """Chevron › — panel sẽ thu về mép phải (nút thu gọn trên tiêu đề panel)."""
+    painter.drawLine(_p(rect, 0.34, 0.10), _p(rect, 0.66, 0.50))
+    painter.drawLine(_p(rect, 0.66, 0.50), _p(rect, 0.34, 0.90))
+
+
+def _draw_chevron_left(painter, rect, color):
+    """Chevron ‹ — kéo panel từ mép phải ra (nút mở lại trên tab thu gọn)."""
+    painter.drawLine(_p(rect, 0.66, 0.10), _p(rect, 0.34, 0.50))
+    painter.drawLine(_p(rect, 0.34, 0.50), _p(rect, 0.66, 0.90))
 
 
 def _draw_bg_cycle(painter, rect, color):
@@ -486,6 +488,7 @@ _DRAWERS = {
     "search": _draw_search,
     "paste": _draw_paste,
     "ocr": _draw_ocr,
-    "panel_toggle": _draw_panel_toggle,
+    "chevron_right": _draw_chevron_right,
+    "chevron_left": _draw_chevron_left,
     "bg_cycle": _draw_bg_cycle,
 }

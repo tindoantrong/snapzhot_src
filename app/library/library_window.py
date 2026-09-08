@@ -217,10 +217,26 @@ class LibraryWindow(QMainWindow):
             tb.addAction(act)
 
     def refresh(self) -> None:
+        """Dựng lại toàn bộ lưới. Tốn ~1ms/ảnh (mỗi thẻ đọc 1 thumbnail từ đĩa)
+        nên chỉ dùng khi nội dung đổi nhiều; xoá 1 mục thì dùng
+        `remove_capture_row()`."""
         self.list.clear()
-        captures = self.library.list_captures(self.search_box.text().strip())
-        for cap in captures:
+        for cap in self.library.list_captures(self.search_box.text().strip()):
             self.list.addItem(self._make_item(cap))
+        self._sync_counts()
+
+    def remove_capture_row(self, capture_id: int) -> bool:
+        """Gỡ đúng một thẻ khỏi lưới, không dựng lại cả lưới. True nếu có gỡ."""
+        for i in range(self.list.count()):
+            if self.list.item(i).data(Qt.UserRole) == capture_id:
+                self.list.takeItem(i)
+                self._sync_counts()
+                return True
+        return False
+
+    def _sync_counts(self) -> None:
+        """Cập nhật nhãn đếm + trạng thái rỗng theo DB (query, không đọc ảnh)."""
+        captures = self.library.list_captures(self.search_box.text().strip())
         n_img = sum(1 for c in captures if not c.is_video)
         n_vid = len(captures) - n_img
         self.count_label.setText(f"{n_img} ảnh · {n_vid} video")

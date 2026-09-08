@@ -181,14 +181,29 @@ class LibraryManager:
         self._conn.commit()
 
     def delete(self, capture_id: int) -> None:
+        """Xoá cả file lẫn bản ghi (đồng bộ). Lỗi xoá file được bỏ qua."""
         cap = self.get(capture_id)
         if cap is None:
             return
+        try:
+            self.delete_files(cap)
+        except OSError:
+            pass
+        self.delete_record(capture_id)
+
+    @staticmethod
+    def delete_files(cap: Capture) -> None:
+        """Xoá file ảnh + thumbnail của một capture.
+
+        Tách riêng khỏi `delete()` để caller có thể đẩy phần chạm đĩa này sang
+        luồng nền (unlink trên Windows có thể bị antivirus/indexer giữ vài trăm
+        ms). KHÔNG nuốt OSError: caller cần biết để còn báo lại người dùng.
+        """
         for p in (Path(cap.path), cap.thumbnail_path):
-            try:
-                p.unlink(missing_ok=True)
-            except OSError:
-                pass
+            p.unlink(missing_ok=True)
+
+    def delete_record(self, capture_id: int) -> None:
+        """Xoá riêng bản ghi DB (nhanh, ~1ms) — không đụng tới file trên đĩa."""
         self._conn.execute("DELETE FROM captures WHERE id=?", (capture_id,))
         self._conn.commit()
 

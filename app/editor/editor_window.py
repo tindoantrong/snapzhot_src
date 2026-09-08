@@ -131,6 +131,16 @@ QUICK_STYLES = [
     {"name": "Xanh lá", "color": "#34C759", "width": 4},
 ]
 
+# PySide6 không export QWIDGETSIZE_MAX; dùng đúng hằng của Qt để gỡ khoá
+# setFixedWidth (min=max) khi bung panel Thuộc tính trở lại.
+_QWIDGETSIZE_MAX = 16777215
+
+# Lề thanh tiêu đề panel Thuộc tính: lúc mở (có nhãn) và lúc thu gọn (chỉ nút).
+_PROPS_TITLE_MARGINS = (10, 5, 4, 5)
+_PROPS_TAB_MARGINS = (3, 5, 3, 5)
+# Sàn bề rộng của tab còn lại ở mép phải khi panel thu gọn (px).
+_PROPS_TAB_MIN_WIDTH = 28
+
 # Theme tối tập trung cho toàn bộ cửa sổ Editor.
 EDITOR_QSS = """
 QMainWindow, QMainWindow > QWidget { background: #2B2D31; }
@@ -177,6 +187,16 @@ QDockWidget::title {
 }
 #propsPanel { background: #2B2D31; }
 #propsPanel QLabel { color: #DDDDDD; }
+#propsTitleBar { background: #33363B; }
+#propsTitle { color: #E8E8E8; font-weight: bold; }
+#propsCollapseBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 3px;
+}
+#propsCollapseBtn:hover { background: #3E4248; border: 1px solid #55585E; }
+#propsCollapseBtn:pressed { background: #2F3338; }
 QSlider::groove:horizontal {
     height: 4px;
     background: #4A4D52;
@@ -538,6 +558,9 @@ class EditorWindow(QMainWindow):
         self.zoom_label.setAlignment(Qt.AlignCenter)
         tb.addWidget(self.zoom_label)
 
+        # Vạch phân cách: tách nhóm zoom (mức phóng) khỏi nút Nền. Cả hai cùng
+        # điều khiển "cách xem canvas" nên ở cạnh nhau, nhưng không được đọc
+        # nhầm thành nút zoom thứ ba.
         tb.addSeparator()
 
         # Nút cycle nền canvas: Tối → Trắng → Đen → ...
@@ -550,21 +573,6 @@ class EditorWindow(QMainWindow):
         self._bg_cycle_action.triggered.connect(self._cycle_canvas_bg)
         tb.addAction(self._bg_cycle_action)
         btn = tb.widgetForAction(self._bg_cycle_action)
-        if btn is not None:
-            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
-
-        # Nút toggle ẩn/hiện panel Thuộc tính (props_dock được gán sau khi panel dựng).
-        self._props_toggle_action = QAction("Thuộc tính", self)
-        self._props_toggle_action.setCheckable(True)
-        self._props_toggle_action.setChecked(True)
-        self._props_toggle_action.setShortcut(QKeySequence("F4"))
-        self._props_toggle_action.setIcon(tool_icon("panel_toggle"))
-        self._props_toggle_action.setToolTip("Ẩn/hiện panel Thuộc tính (F4)")
-        self._props_toggle_action.triggered.connect(
-            lambda checked: self.props_dock.setVisible(checked)
-        )
-        tb.addAction(self._props_toggle_action)
-        btn = tb.widgetForAction(self._props_toggle_action)
         if btn is not None:
             btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
@@ -596,9 +604,35 @@ class EditorWindow(QMainWindow):
     def _build_properties_panel(self) -> None:
         from PySide6.QtWidgets import QDockWidget
 
-        dock = QDockWidget("Tool Properties", self)
+        dock = QDockWidget("Thuộc tính", self)
+        dock.setObjectName("propsDock")
         dock.setAllowedAreas(Qt.RightDockWidgetArea)
         dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
+
+        # Thanh tiêu đề tự dựng: nhãn trái + nút thu gọn phải. Điều khiển đóng/mở
+        # nằm ngay trên chính panel nó điều khiển (thay vì một nút rời trên
+        # toolbar), nên quan hệ nút ↔ đối tượng là hiển nhiên.
+        titlebar = QWidget()
+        titlebar.setObjectName("propsTitleBar")
+        tl = QHBoxLayout(titlebar)
+        tl.setContentsMargins(*_PROPS_TITLE_MARGINS)
+        tl.setSpacing(4)
+        self._props_title_layout = tl
+        self._props_title_label = QLabel("Thuộc tính")
+        self._props_title_label.setObjectName("propsTitle")
+        tl.addWidget(self._props_title_label)
+        tl.addStretch(1)
+        self._props_collapse_btn = QToolButton()
+        self._props_collapse_btn.setObjectName("propsCollapseBtn")
+        self._props_collapse_btn.setAutoRaise(True)
+        self._props_collapse_btn.setIconSize(QSize(16, 16))
+        self._props_collapse_btn.clicked.connect(
+            lambda: self._set_props_expanded(not self._props_expanded)
+        )
+        tl.addWidget(self._props_collapse_btn)
+        dock.setTitleBarWidget(titlebar)
+        self._props_titlebar = titlebar
+
         panel = QWidget()
         panel.setObjectName("propsPanel")
         layout = QVBoxLayout(panel)
@@ -780,8 +814,71 @@ class EditorWindow(QMainWindow):
 
         dock.setWidget(panel)
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        self.props_dock = dock  # tham chiếu để toggle từ action
+        self.props_dock = dock
+        self._props_panel = panel
+        self._props_expanded = True
+        self._props_width = 0  # bề rộng lúc mở, nhớ lại khi bung ra
+
+        # F4 vẫn ẩn/hiện panel dù nút đã rời khỏi toolbar: action gắn thẳng vào
+        # cửa sổ (không thuộc toolbar nào) nên phím tắt luôn sống.
+        self._props_toggle_action = QAction("Thuộc tính", self)
+        self._props_toggle_action.setCheckable(True)
+        self._props_toggle_action.setChecked(True)
+        self._props_toggle_action.setShortcut(QKeySequence("F4"))
+        self._props_toggle_action.setShortcutContext(Qt.WindowShortcut)
+        self._props_toggle_action.setToolTip("Ẩn/hiện panel Thuộc tính (F4)")
+        self._props_toggle_action.triggered.connect(self._set_props_expanded)
+        self.addAction(self._props_toggle_action)
+
+        self._set_props_expanded(True)
         self._set_color(self.canvas.state.color)
+
+    def _set_props_expanded(self, expanded: bool) -> None:
+        """Mở/thu gọn panel Thuộc tính.
+
+        Thu gọn KHÔNG ẩn hẳn dock: giữ lại một tab hẹp ở mép phải mang chevron ‹
+        để mở lại — nút điều khiển không biến mất cùng thứ nó điều khiển.
+        """
+        expanded = bool(expanded)
+        dock = self.props_dock
+        if not expanded and self._props_panel.isVisible():
+            # Nhớ bề rộng đang dùng để bung lại đúng như cũ.
+            self._props_width = max(dock.width(), self._props_width)
+
+        self._props_panel.setVisible(expanded)
+        self._props_title_label.setVisible(expanded)
+        self._props_collapse_btn.setIcon(
+            tool_icon("chevron_right" if expanded else "chevron_left", size=16)
+        )
+        self._props_collapse_btn.setToolTip(
+            "Thu gọn panel Thuộc tính (F4)" if expanded
+            else "Mở panel Thuộc tính (F4)"
+        )
+
+        # Thu gọn: lề hẹp lại để tab chỉ vừa đúng cái nút; bo góc dưới-trái cho
+        # ra dáng "tab" dính mép phải thay vì một mẩu thanh bị cắt.
+        self._props_title_layout.setContentsMargins(
+            *(_PROPS_TITLE_MARGINS if expanded else _PROPS_TAB_MARGINS)
+        )
+        self._props_titlebar.setStyleSheet(
+            "" if expanded else
+            "#propsTitleBar { background: #33363B; "
+            "border-bottom-left-radius: 6px; }"
+        )
+
+        if expanded:
+            dock.setMinimumWidth(0)
+            dock.setMaximumWidth(_QWIDGETSIZE_MAX)
+            if self._props_width:
+                self.resizeDocks([dock], [self._props_width], Qt.Horizontal)
+        else:
+            self._props_titlebar.adjustSize()
+            dock.setFixedWidth(max(self._props_titlebar.sizeHint().width(),
+                                   _PROPS_TAB_MIN_WIDTH))
+
+        self._props_expanded = expanded
+        if self._props_toggle_action.isChecked() != expanded:
+            self._props_toggle_action.setChecked(expanded)
 
     def _update_props_visibility(self, tool: Tool) -> None:
         """Chỉ hiện các nhóm thuộc tính liên quan tới công cụ đang chọn."""
@@ -1106,6 +1203,9 @@ class EditorWindow(QMainWindow):
 
         self.recent_strip = strip
         self.recent_dock = dock
+        # Thẻ đã gỡ khỏi dải nhưng controller chưa xoá xong: {id: (dòng, item)}.
+        # Giữ lại để trả về đúng chỗ nếu thao tác xoá thất bại.
+        self._removed_recents: dict[int, tuple[int, QListWidgetItem]] = {}
         dock.setWidget(strip)
         self.addDockWidget(Qt.BottomDockWidgetArea, dock)
         dock.hide()
@@ -1116,6 +1216,7 @@ class EditorWindow(QMainWindow):
         Rỗng → ẩn dock. Sau khi dựng, đồng bộ highlight theo ảnh đang mở.
         """
         self.recent_strip.clear()
+        self._removed_recents.clear()  # dựng lại từ nguồn thật → bỏ bản lưu tạm
         for it in items:
             pix = QPixmap(str(it.get("thumb", "")))
             icon = QIcon(pix) if not pix.isNull() else QIcon()
@@ -1170,8 +1271,43 @@ class EditorWindow(QMainWindow):
             self._request_delete_capture(int(cid))
 
     def _request_delete_capture(self, capture_id: int) -> None:
-        """Phát yêu cầu xoá lên controller (không hỏi xác nhận)."""
+        """Gỡ thẻ khỏi dải NGAY rồi mới báo controller xoá (optimistic).
+
+        Không hỏi xác nhận và cũng không chờ I/O: thẻ biến mất trong đúng nhịp
+        click, các thẻ còn lại tự dồn chỗ. Nếu xoá hỏng, controller gọi
+        `restore_recent_item()` để trả thẻ về vị trí cũ.
+        """
+        self._take_recent_item(capture_id)
         self.delete_capture_requested.emit(capture_id)
+
+    def _take_recent_item(self, capture_id: int) -> bool:
+        """Gỡ thẻ khỏi dải, giữ lại (dòng, item) để còn hoàn tác được."""
+        for i in range(self.recent_strip.count()):
+            if self.recent_strip.item(i).data(Qt.UserRole) == capture_id:
+                self._removed_recents[capture_id] = (i, self.recent_strip.takeItem(i))
+                if self.recent_strip.count() == 0:
+                    self.recent_dock.setVisible(False)
+                return True
+        return False
+
+    def restore_recent_item(self, capture_id: int) -> bool:
+        """Trả thẻ đã gỡ về đúng vị trí cũ (controller gọi khi xoá thất bại)."""
+        entry = self._removed_recents.pop(capture_id, None)
+        if entry is None:
+            return False
+        row, item = entry
+        self.recent_strip.insertItem(min(row, self.recent_strip.count()), item)
+        self.recent_dock.setVisible(True)
+        self._sync_recent_highlight()
+        return True
+
+    def forget_removed_recent(self, capture_id: int) -> None:
+        """Bỏ bản lưu tạm sau khi controller báo xoá xong (hết đường hoàn tác)."""
+        self._removed_recents.pop(capture_id, None)
+
+    def show_toast(self, text: str) -> None:
+        """Toast công khai để controller báo tin ngắn (vd xoá ảnh thất bại)."""
+        self._show_toast(text)
 
     # ---------- status bar ----------
     def _build_status_bar(self) -> None:

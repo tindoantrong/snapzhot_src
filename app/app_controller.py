@@ -10,8 +10,11 @@ from __future__ import annotations
 import os
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
-from PySide6.QtCore import QObject, QRect, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import (
+    QObject, QRect, QRunnable, Qt, QThread, QThreadPool, QTimer, QUrl, Signal, Slot,
+)
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QImage
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -103,6 +106,37 @@ QCheckBox::indicator {
 }
 QCheckBox::indicator:checked { background:#1E90FF; border-color:#1E90FF; }
 """
+
+
+class _UnlinkSignals(QObject):
+    """Cầu nối kết quả từ luồng nền về luồng GUI (QRunnable không phát signal)."""
+
+    done = Signal(int, str)  # capture_id, lỗi ("" nếu xoá xong)
+
+
+class _UnlinkTask(QRunnable):
+    """Xoá file ảnh + thumbnail của một capture ở luồng nền.
+
+    Vì sao không làm thẳng trên luồng GUI: unlink trên Windows đi qua
+    antivirus/indexer, một file PNG vài MB có thể bị giữ hàng trăm ms — đủ để
+    cửa sổ đứng hình ngay sau khi bấm X.
+    """
+
+    def __init__(self, capture_id: int, paths: list[str],
+                 signals: _UnlinkSignals) -> None:
+        super().__init__()
+        self._capture_id = capture_id
+        self._paths = paths
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            for p in self._paths:
+                Path(p).unlink(missing_ok=True)
+            error = ""
+        except OSError as exc:
+            error = str(exc)
+        self._signals.done.emit(self._capture_id, error)
 
 
 class _UpdateCheckWorker(QObject):
@@ -408,8 +442,12 @@ class AppController(QObject):
         self.editor.request_video.connect(self.toggle_video_recording)
         # Nhấp thumbnail "Ảnh gần đây" trong Editor → mở lại đúng ảnh đó.
         self.editor.open_capture_requested.connect(self._open_capture_in_editor)
-        # Yêu cầu xoá ảnh từ dải "Ảnh gần đây".
+        # Yêu cầu xoá ảnh từ dải "Ảnh gần đây" (xoá nền, không hỏi xác nhận).
         self.editor.delete_capture_requested.connect(self._on_delete_capture)
+        self._unlink_signals = _UnlinkSignals()
+        self._unlink_signals.done.connect(self._on_capture_files_unlinked)
+        # capture_id đang xoá dở → có phải ảnh đang mở trong Editor không.
+        self._pending_deletes: dict[int, bool] = {}
         # Nút "Về thư viện" trong Editor → hiện màn hình thư viện.
         self.editor.request_library.connect(self.show_library)
         # OCR ảnh bằng Claude CLI.
@@ -1118,16 +1156,55 @@ class AppController(QObject):
 
     @Slot(int)
     def _on_delete_capture(self, capture_id: int) -> None:
-        """Xoá ảnh từ dải 'Ảnh gần đây'; nếu xoá ảnh đang mở thì nhảy ảnh mới nhất."""
-        was_current = capture_id == self.editor.current_capture_id
-        self.library.delete(capture_id)
-        self.library_window.refresh()
-        self._refresh_editor_recents()
+        """Xoá ảnh từ dải 'Ảnh gần đây' (bỏ khỏi danh sách + xoá file gốc).
+
+        Thẻ ảnh đã biến mất khỏi dải ngay lúc click (editor tự gỡ), nên ở đây
+        chỉ còn phần dữ liệu: đẩy toàn bộ I/O đĩa sang luồng nền để người dùng
+        thao tác tiếp được. Bản ghi DB chỉ xoá SAU khi file xoá xong — hỏng thì
+        trả thẻ về nguyên trạng, không để lại dữ liệu nửa vời.
+        """
+        if capture_id in self._pending_deletes:
+            return  # đang xoá dở, đừng bắn thêm task nữa
+        cap = self.library.get(capture_id)
+        if cap is None:
+            # Bản ghi đã biến mất từ trước → chỉ dọn nốt giao diện.
+            self.editor.forget_removed_recent(capture_id)
+            self.library_window.remove_capture_row(capture_id)
+            return
+        self._pending_deletes[capture_id] = (
+            capture_id == self.editor.current_capture_id
+        )
+        QThreadPool.globalInstance().start(_UnlinkTask(
+            capture_id, [cap.path, str(cap.thumbnail_path)], self._unlink_signals
+        ))
+
+    @Slot(int, str)
+    def _on_capture_files_unlinked(self, capture_id: int, error: str) -> None:
+        """Luồng nền xoá file xong → chốt DB + dọn giao diện, hoặc hoàn tác."""
+        was_current = self._pending_deletes.pop(capture_id, False)
+        if error:
+            # Không im lặng nuốt lỗi: trả thẻ về chỗ cũ + báo ngắn cho người dùng.
+            _log.error("[delete] không xoá được file của capture %s: %s",
+                       capture_id, error)
+            self.editor.restore_recent_item(capture_id)
+            self.editor.show_toast("Không xoá được ảnh — thử lại")
+            return
+
+        self.library.delete_record(capture_id)
+        self.editor.forget_removed_recent(capture_id)
+        # Gỡ đúng 1 thẻ thay vì refresh() cả lưới (refresh đọc lại toàn bộ
+        # thumbnail từ đĩa, ~1ms/ảnh — thư viện vài trăm ảnh là thấy khựng).
+        self.library_window.remove_capture_row(capture_id)
+
         if was_current:
             remaining = [c for c in self.library.list_captures() if not c.is_video]
             if remaining:
                 # list_captures sắp xếp mới→cũ → phần tử đầu là ảnh mới nhất.
+                # _open_capture_in_editor tự bơm lại dải ảnh gần đây.
                 self._open_capture_in_editor(remaining[0].id)
+                return
+        # Dải chỉ giữ 12 ảnh → bơm lại để ảnh kế tiếp lấp vào chỗ vừa trống.
+        self._refresh_editor_recents()
 
     def show_library(self) -> None:
         self.library_window.show()

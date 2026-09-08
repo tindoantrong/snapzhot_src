@@ -132,35 +132,19 @@ menu.grab().save(os.path.join(OUT, "rec2_05_context_menu.png"))
 LOG.append("rec2_05_context_menu.png")
 menu.close()
 
-mb = QMessageBox(QMessageBox.Question, "Xoá ảnh",
-                 "Xoá ảnh này khỏi thư viện?",
-                 QMessageBox.Yes | QMessageBox.No, w)
-mb.setDefaultButton(QMessageBox.No)
-mb.show()
-for _ in range(3):
-    app.processEvents()
-mb.grab().save(os.path.join(OUT, "rec2_06_confirm_dialog.png"))
-LOG.append("rec2_06_confirm_dialog.png")
-default_is_no = (mb.defaultButton() is mb.button(QMessageBox.No))
-mb.close()
-print("CA6 confirm: defaultButton == No ->", default_is_no)
-
-# ---- CA: confirm No → KHÔNG xoá ----
+# UI-ENH-01 bỏ hộp xác nhận, REC-ASYNC bỏ luôn cả chờ I/O: bấm X là thẻ đi ngay.
 emitted = []
 w.delete_capture_requested.connect(lambda c: emitted.append(c))
-QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.No)
 count_before = w.recent_strip.count()
-w._request_delete_capture(5)
-print("CA confirm No: emitted =", emitted, "| count giữ nguyên =",
-      (w.recent_strip.count() == count_before == 6))
 
-# ---- CA3: confirm Yes → xoá ảnh KHÔNG đang mở (id=5) ----
-QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
+# ---- CA3: xoá ảnh KHÔNG đang mở (id=5) → thẻ biến mất ngay, không hỏi ----
 w._request_delete_capture(5)
+print("CA3 no-confirm: emitted =", emitted, "| count", count_before, "->",
+      w.recent_strip.count())
 shot(w, "rec2_02_after_delete_id5.png")
 ids_now = [w.recent_strip.item(i).data(Qt.UserRole)
            for i in range(w.recent_strip.count())]
-print("CA3 delete id5 (Yes): ids =", ids_now,
+print("CA3 delete id5: ids =", ids_now,
       "| current giữ id2 =", w.current_capture_id,
       "| selected =", selected_id(w))
 
@@ -181,7 +165,7 @@ shot(w, "rec2_04_after_delete_all_dock_hidden.png")
 print("CA5 delete all: count =", w.recent_strip.count(),
       "| dock visible =", w.recent_dock.isVisible())
 
-# ---- CA: phím Delete trên strip → đường xoá chạy (qua confirm) ----
+# ---- CA: phím Delete trên strip → đường xoá chạy ngay ----
 from PySide6.QtCore import QEvent
 from PySide6.QtGui import QKeyEvent
 recents = make_thumbs()
@@ -193,7 +177,7 @@ ev = QKeyEvent(QEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
 handled = w.eventFilter(w.recent_strip, ev)
 after = w.recent_strip.count()
 print("CA Delete-key: currentItem =", cur, "| handled(nuốt phím) =", handled,
-      "| count", before, "->", after, "(xoá 1 qua confirm Yes)")
+      "| count", before, "->", after, "(xoá thẳng, không hỏi)")
 
 print("SAVED:")
 for n in LOG:
