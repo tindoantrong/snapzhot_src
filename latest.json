@@ -1,5 +1,5 @@
 {
-  "version": "0.1.33",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.33.exe",
-  "notes": "Sửa lỗi đẩy release lên GitHub bị timeout khi upload file cài đặt (~133MB); giờ pipeline tách riêng bước tạo release và upload file, tự thử lại tối đa 3 lần nếu upload thất bại."
+  "version": "0.1.34",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.34.exe",
+  "notes": "v0.1.34: 5 cải tiến editor (nút Copy góc phải, thu gọn panel Thuộc tính F4, thanh công cụ gọn + gộp Zoom, đổi nền canvas Tối/Trắng/Đen, nút X xoá nhanh ảnh gần đây) và hộp thoại Phím tắt khi khởi động (có tuỳ chọn không hiện lại)."
 }
