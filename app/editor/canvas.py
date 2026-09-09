@@ -891,13 +891,15 @@ class Canvas(QGraphicsView):
         self._resize_item = None
         self.undo_stack.clear()
         self.state.step_number = 1
-        self._auto_fit = True
+        # Mở ảnh ở đúng 100% (1 pixel ảnh = 1 pixel màn hình), không tự co vừa khung.
+        # Ctrl+0 (Vừa khung) mới bật lại chế độ auto-fit theo kích thước cửa sổ.
+        self._auto_fit = False
         self.resetTransform()
         self._bg_item = QGraphicsPixmapItem(QPixmap.fromImage(image))
         self._bg_item.setZValue(-1000)
         self._scene.addItem(self._bg_item)
         self._scene.setSceneRect(QRectF(image.rect()))
-        self.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
+        self.centerOn(self._scene.sceneRect().center())
         self.step_number_changed.emit(self.state.step_number)
         self._emit_zoom()
 
@@ -1302,14 +1304,16 @@ class Canvas(QGraphicsView):
         self.ocr_region_selected.emit(region)
 
     def _apply_crop(self, rect: QRectF) -> None:
-        """Cắt ảnh theo vùng chọn qua CropCommand (undo được), rồi fit lại."""
+        """Cắt ảnh theo vùng chọn qua CropCommand (undo được), rồi về 100%."""
         if self._bg_item is None:
             return
         r = rect.intersected(self._scene.sceneRect()).toRect()
         if r.width() < 2 or r.height() < 2:
             return
         self.undo_stack.push(CropCommand(self._scene, self._bg_item, r))
-        self.zoom_fit()
+        # Giữ đúng 100% như lúc mở ảnh: cắt vùng nhỏ không bị phóng to lên vài trăm %.
+        self.zoom_actual()
+        self.centerOn(self._scene.sceneRect().center())
 
     def _commit_moves(self) -> None:
         moved = [
