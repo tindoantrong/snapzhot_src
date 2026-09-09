@@ -1,5 +1,5 @@
 {
-  "version": "0.1.36",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.36.exe",
-  "notes": "v0.1.36: Nút thu gọn panel Thuộc tính chuyển vào ngay tiêu đề panel (chevron góc phải); thu gọn rồi vẫn còn tab nhỏ ở mép phải để mở lại, phím F4 giữ nguyên. Thanh công cụ trên bớt một nút, nút Nền được ngăn nhóm với zoom. Xoá ảnh trong 'Ảnh gần đây' bằng nút X nay phản hồi tức thì: thẻ ảnh biến mất ngay, phần xoá file chạy ở nền (trước đây đứng hình 0,15-0,3 giây với thư viện vài trăm ảnh); nếu xoá hỏng thì thẻ được trả lại kèm thông báo."
+  "version": "0.1.37",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.37.exe",
+  "notes": "Cửa sổ chỉnh sửa nay mở ảnh ở đúng 100% (1 pixel ảnh = 1 pixel màn hình) thay vì tự co vừa khung: ảnh chụp full-screen không còn bị thu nhỏ, ảnh nhỏ không còn bị phóng to. Cắt ảnh (Crop) xong cũng giữ 100% và canh giữa khung. Nhấn Ctrl+0 để xem vừa khung, Ctrl+1 để về 100%."
 }
