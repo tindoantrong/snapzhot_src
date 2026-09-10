@@ -4,7 +4,7 @@
 
 Bản clone tối giản của Snagit, viết bằng **Python + PySide6 (Qt)**, đóng gói được thành `.exe` chạy trên Windows. Gồm 3 phần như Snagit:
 
-1. **Capture** — chụp **vùng chọn**, **toàn màn hình** (đa màn hình), **chụp cửa sổ** (highlight cửa sổ dưới con trỏ), và **chụp hẹn giờ** (đếm ngược 3s/5s).
+1. **Capture** — chụp **vùng chọn**, **toàn màn hình** (đa màn hình), **chụp cửa sổ** (highlight cửa sổ dưới con trỏ, hoặc chụp ngay app đang dùng bằng một nút), và **chụp hẹn giờ** (đếm ngược 3s/5s).
 2. **Library** — thư viện ảnh **và video** đã chụp, lưu trong SQLite, tìm kiếm & gắn tag; **trình phát video nhúng** ngay trong app.
 3. **Editor** — canvas vẽ chú thích: mũi tên, chữ nhật, elip, bút vẽ, chữ, đánh dấu (highlight), làm mờ (blur), **đánh số bước (step)**, **cắt ảnh (crop)**, **stamp (chèn biểu tượng — 6 glyph)**, **tiêu điểm (spotlight — làm tối ngoài vùng chọn)**; panel phải có **Express Styles (6 preset)**, **Độ trong (Opacity)**, **Đổ bóng (Shadow)**, **Tô nền (Fill)** cho chữ nhật/elip; có **Zoom** (in/out/fit/100% + Ctrl+lăn chuột) và **Hoàn tác/Làm lại (Undo/Redo)** nhiều bước.
 4. **Recording** — **quay video toàn màn hình** xuất MP4 (H.264), tùy chọn **quay kèm âm thanh micro**.
@@ -36,6 +36,10 @@ App chạy ở **khay hệ thống** (system tray, icon chấm đỏ). Lần đ�
 ### Thao tác chính
 - **Chụp** (qua phím tắt hoặc menu khay) → ảnh tự lưu vào thư viện và mở trong Editor.
 - **Chụp cửa sổ** (menu khay → "Chụp cửa sổ"): di chuột tới cửa sổ cần chụp, khung được highlight, bấm chọn. *(Cần `pywin32` trên Windows; thiếu thì báo và bỏ qua, không ảnh hưởng tính năng khác.)*
+- **Chụp app đang dùng** (nút **"Chụp app đang dùng"** trên toolbar Editor, hoặc menu khay →
+  "Chụp cửa sổ vừa dùng"): bấm một phát là chụp luôn cửa sổ app đang làm việc (cửa sổ ngay phía
+  sau Editor) — tiện khi cần ảnh app để **báo bug**. Khung lấy theo DWM nên **không dính viền/bóng
+  đổ** của Windows. *(Cần `pywin32` trên Windows; thiếu thì báo và bỏ qua.)*
 - **Chụp hẹn giờ** (menu khay → "Chụp hẹn giờ" → 3s/5s): đếm ngược hiển thị to giữa màn hình rồi tự chụp toàn màn hình.
 - **Vẽ**: chọn công cụ ở thanh trên, chỉnh **màu / độ dày / cỡ chữ / số bước** ở panel phải.
 - **Phím tắt 1 phím trong Editor**: `V` Chọn · `A` Mũi tên · `R` Chữ nhật · `E` Elip · `P` Bút · `T` Chữ · `H` Đánh dấu · `B` Mờ · `S` Bước · `C` Cắt · `M` Stamp · `F` Tiêu điểm · `O` Callout.
@@ -93,7 +97,7 @@ snagit_tin/
    ├─ capture/
    │  ├─ capture_manager.py    # chụp bằng mss -> QImage
    │  ├─ region_selector.py    # overlay kéo chọn vùng
-   │  ├─ window_selector.py    # overlay chụp cửa sổ (win32gui, có fallback)
+   │  ├─ window_selector.py    # chụp cửa sổ: overlay hover + tìm cửa sổ đang active (win32gui/DWM, có fallback)
    │  └─ countdown_overlay.py  # overlay đếm ngược cho chụp hẹn giờ
    ├─ library/
    │  ├─ library_manager.py    # SQLite + thumbnail + tag + video (migration)

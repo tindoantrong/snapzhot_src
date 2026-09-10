@@ -350,6 +350,24 @@ def _draw_capture_full(painter: QPainter, rect: QRectF, color: QColor) -> None:
     painter.drawLine(_p(rect, 0.30, 0.98), _p(rect, 0.70, 0.98))
 
 
+def _draw_capture_window(painter: QPainter, rect: QRectF, color: QColor) -> None:
+    # Cửa sổ app: khung + thanh tiêu đề + 2 nút nhỏ.
+    # Phân biệt với capture_full (màn hình có chân đế) và capture_region (4 góc).
+    win = QRectF(rect.left(), rect.top() + rect.height() * 0.10,
+                 rect.width(), rect.height() * 0.80)
+    r = rect.width() * 0.10
+    painter.drawRoundedRect(win, r, r)
+    bar_y = win.top() + win.height() * 0.30
+    painter.drawLine(QPointF(win.left(), bar_y), QPointF(win.right(), bar_y))
+    painter.save()
+    painter.setBrush(QBrush(color))
+    dot = rect.width() * 0.05
+    cy = win.top() + win.height() * 0.15
+    for fx in (0.72, 0.88):
+        painter.drawEllipse(QPointF(win.left() + fx * win.width(), cy), dot, dot)
+    painter.restore()
+
+
 def _draw_video(painter: QPainter, rect: QRectF, color: QColor) -> None:
     # Thân camera + ống kính tam giác bên phải.
     body = QRectF(rect.left(), rect.top() + rect.height() * 0.22,
@@ -592,6 +610,7 @@ _DRAWERS = {
     "zoom_actual": _draw_zoom_actual,
     "capture_region": _draw_capture_region,
     "capture_full": _draw_capture_full,
+    "capture_window": _draw_capture_window,
     "video": _draw_video,
     "save": _draw_save,
     "export": _draw_export,

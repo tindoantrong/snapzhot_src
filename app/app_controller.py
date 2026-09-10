@@ -437,7 +437,6 @@ class AppController(QObject):
     request_region = Signal()
     request_video_toggle = Signal()
     request_escape = Signal()
-    request_active_window = Signal()   # chụp ngay cửa sổ đang dùng (phím tắt)
 
     def __init__(self) -> None:
         super().__init__()
@@ -457,6 +456,9 @@ class AppController(QObject):
         # Nút chụp/quay trong Editor dùng chung luồng với thư viện.
         self.editor.request_capture_region.connect(self.capture_region)
         self.editor.request_capture_fullscreen.connect(self.capture_fullscreen)
+        # Nút "Chụp app đang dùng": Editor đang là foreground khi bấm → slot tự
+        # lùi về cửa sổ hợp lệ trên cùng (bỏ qua cửa sổ của chính app).
+        self.editor.request_capture_active_window.connect(self.capture_active_window)
         self.editor.request_video.connect(self.toggle_video_recording)
         # Nhấp thumbnail "Ảnh gần đây" trong Editor → mở lại đúng ảnh đó.
         self.editor.open_capture_requested.connect(self._open_capture_in_editor)
@@ -544,8 +546,6 @@ class AppController(QObject):
         self.request_region.connect(self.capture_region, Qt.QueuedConnection)
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
-        self.request_active_window.connect(
-            self.capture_active_window, Qt.QueuedConnection)
 
         # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 30 phút.
         self._auto_check_done = False
@@ -805,12 +805,14 @@ class AppController(QObject):
             return
         self.window_selector.start()
 
-    # Khoảng chặn lặp cho chụp app đang dùng (auto-repeat bàn phím ~30ms/nhịp).
+    # Chặn bấm dồn: click đúp vào nút không được đẻ 2 ảnh.
     _ACTIVE_WINDOW_DEBOUNCE_S = 0.6
 
     @Slot()
     def capture_active_window(self) -> None:
-        """Chụp NGAY cửa sổ đang dùng, không cần rê chuột (dùng cho phím tắt).
+        """Chụp NGAY cửa sổ đang dùng, không cần rê chuột.
+
+        Gọi từ nút "Chụp app đang dùng" trên toolbar Editor và mục menu khay.
 
         Hai nhánh:
         - Cửa sổ đang focus hợp lệ → nó nằm trên cửa sổ của app mình (Editor/Thư
@@ -823,7 +825,7 @@ class AppController(QObject):
             return  # Bỏ qua: dialog phím tắt đang mở
         now = time.monotonic()
         if now - self._last_active_window_capture < self._ACTIVE_WINDOW_DEBOUNCE_S:
-            return  # auto-repeat khi giữ phím → chỉ chụp 1 lần
+            return  # bấm dồn trong 0.6s → chỉ chụp 1 lần
         self._last_active_window_capture = now
 
         if not window_capture_available():
@@ -1390,18 +1392,6 @@ class AppController(QObject):
             )
         except Exception:
             # Một số máy cần quyền admin để hook bàn phím toàn cục.
-            pass
-
-        # Chụp ngay cửa sổ đang dùng. Dùng add_hotkey KHÔNG suppress (giống
-        # hotkey_video) → không đụng filtered_modifiers nên không tái phát bug
-        # kẹt Ctrl. Không cần lưu remove-handle: remove_all_hotkeys() trong
-        # reload_global_hotkeys() dọn sạch nonblocking_hotkeys.
-        try:
-            keyboard.add_hotkey(
-                self.config.get("hotkey_window", "ctrl+alt+w"),
-                lambda: self._emit_safe(self.request_active_window),
-            )
-        except Exception:
             pass
         self._start_hotkey_watchdog()
 

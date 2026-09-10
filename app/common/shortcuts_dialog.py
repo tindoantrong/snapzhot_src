@@ -201,7 +201,6 @@ class ShortcutsDialog(QDialog):
         # Toàn cục: đọc từ config để hiển thị phím tắt thực tế của user.
         global_rows = [
             ("Chụp vùng chọn", _fmt_key(cfg.get("hotkey_region", "print screen"))),
-            ("Chụp cửa sổ đang dùng", _fmt_key(cfg.get("hotkey_window", "ctrl+alt+w"))),
             ("Bật/tắt quay video", _fmt_key(cfg.get("hotkey_video", "ctrl+shift+r"))),
         ]
         cl.addWidget(self._make_group("TOÀN CỤC (hệ thống)", global_rows))

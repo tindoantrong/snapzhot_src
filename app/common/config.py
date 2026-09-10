@@ -9,10 +9,6 @@ from .paths import config_path
 DEFAULTS: dict[str, Any] = {
     "hotkey_region": "print screen",      # chụp vùng chọn (mặc định PrtScrn)
     "hotkey_video": "ctrl+shift+r",       # bật/tắt quay video
-    # Chụp ngay cửa sổ đang dùng. KHÔNG dùng ctrl+shift+w (Chrome đóng cửa sổ,
-    # vì hotkey này không suppress) và KHÔNG dùng tổ hợp kết thúc bằng
-    # "print screen" (hook_key PrtSc suppress mọi PrtSc bất kể modifier).
-    "hotkey_window": "ctrl+alt+w",
     "video_fps": 15,                      # FPS mục tiêu khi quay
     "record_audio": True,                 # thu mic kèm video (nếu có thiết bị)
     "capture_delay_seconds": 3,           # số giây mặc định cho chụp hẹn giờ

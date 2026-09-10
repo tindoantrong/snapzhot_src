@@ -404,6 +404,7 @@ class EditorWindow(QMainWindow):
     # Các yêu cầu chụp/quay phát lên controller xử lý (giống LibraryWindow).
     request_capture_region = Signal()
     request_capture_fullscreen = Signal()
+    request_capture_active_window = Signal()
     request_video = Signal()
     # Phát capture_id khi người dùng nhấp một thumbnail trong dải "Ảnh gần đây".
     open_capture_requested = Signal(int)
@@ -486,6 +487,8 @@ class EditorWindow(QMainWindow):
         for text, icon, signal, tip in (
             ("Chụp vùng", "capture_region", self.request_capture_region, "Chụp một vùng màn hình"),
             ("Chụp toàn màn hình", "capture_full", self.request_capture_fullscreen, "Chụp toàn bộ màn hình"),
+            ("Chụp app đang dùng", "capture_window", self.request_capture_active_window,
+             "Chụp giao diện app đang dùng — cửa sổ ngay phía sau Editor"),
             ("Quay video", "video", self.request_video, "Quay video màn hình"),
         ):
             act = QAction(text, self)
