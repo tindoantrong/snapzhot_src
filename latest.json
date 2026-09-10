@@ -1,5 +1,5 @@
 {
-  "version": "0.1.38",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.38.exe",
-  "notes": "Giao diện sáng/tối cho toàn ứng dụng: nút mặt trời/mặt trăng ở góc phải thanh công cụ trên cùng, đổi ngay không cần khởi động lại và nhớ lựa chọn cho lần mở sau (áp cho Editor, Thư viện và các hộp thoại). Dải ảnh gần đây thu gọn được thành thanh tiêu đề mỏng ở đáy Editor để mở rộng vùng chỉnh sửa, có đếm số ảnh và nhớ trạng thái. Nút đổi nền vùng ảnh chuyển sang icon ô caro, dời lên góc phải thanh trên cùng nên không còn bị giấu khi cửa sổ hẹp. Sửa lỗi nhãn mức zoom 100% bị chữ đen chìm vào nền tối."
+  "version": "0.1.39",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.39.exe",
+  "notes": "Thêm nút \"Chụp app đang dùng\" trên thanh công cụ Editor (cạnh nút Quay video): bấm một phát là chụp ngay cửa sổ app đang làm việc — tiện khi cần ảnh màn hình để báo bug, không phải rê chuột chọn cửa sổ nữa. Ảnh cắt sát khung app theo DWM nên không dính viền mờ hay bóng đổ của Windows, đúng ở mọi mức phóng to màn hình (125%/150%) và trên nhiều màn hình. Chức năng này cũng có trong menu khay hệ thống ở mục \"Chụp cửa sổ vừa dùng\"."
 }
