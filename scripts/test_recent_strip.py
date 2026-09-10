@@ -2,7 +2,8 @@
 
 Kiểm offscreen: set_recent_captures dựng đúng số item; load_image highlight
 theo capture_id; click item khác phát open_capture_requested(id); click ảnh đang
-mở KHÔNG phát; rỗng → ẩn dock. load_image GIỮ NGUYÊN signature (image, capture_id).
+mở KHÔNG phát; rỗng → thanh tiêu đề vẫn còn, đếm 0 và hiện dòng "Chưa có ảnh
+gần đây". load_image GIỮ NGUYÊN signature (image, capture_id).
 """
 import os
 
@@ -39,9 +40,9 @@ def selected_id(w):
 def main() -> int:
     w = EditorWindow()
 
-    # --- 0. khởi tạo: dock ẩn khi chưa có ảnh gần đây ---
-    assert not w.recent_dock.isVisible(), "dock phải ẩn lúc khởi tạo"
+    # --- 0. khởi tạo: chưa có ảnh → nhãn đếm 0, dải trống ---
     assert w.recent_strip.count() == 0
+    assert w._recent_title_label.text() == "Ảnh gần đây · 0",         w._recent_title_label.text()
 
     # --- 1. set_recent_captures(3) → 3 item, dock hiện ---
     w.set_recent_captures(fake_items())
@@ -50,6 +51,7 @@ def main() -> int:
     w.show()
     app.processEvents()
     assert w.recent_dock.isVisible(), "dock phải hiện khi có item"
+    assert w._recent_title_label.text() == "Ảnh gần đây · 3",         w._recent_title_label.text()
     ids = [w.recent_strip.item(i).data(Qt.UserRole) for i in range(3)]
     assert ids == [1, 2, 3], ids
     # chưa load ảnh nào → không item nào selected
@@ -80,11 +82,26 @@ def main() -> int:
     w.set_recent_captures(fake_items())
     assert selected_id(w) == 2, selected_id(w)
 
-    # --- 5. rỗng → ẩn dock ---
+    # --- 5. rỗng → thanh tiêu đề Ở LẠI (đếm 0) + dòng "Chưa có ảnh gần đây" ---
     w.set_recent_captures([])
     app.processEvents()
     assert w.recent_strip.count() == 0
-    assert not w.recent_dock.isVisible(), "dock phải ẩn khi rỗng"
+    assert w.recent_dock.isVisible(), "thanh tiêu đề phải còn khi rỗng"
+    assert w._recent_title_label.text() == "Ảnh gần đây · 0",         w._recent_title_label.text()
+    assert w._recent_empty.isVisible(), "phải hiện dòng 'Chưa có ảnh gần đây'"
+    assert not w.recent_strip.isVisible(), "dải rỗng thì nhường chỗ cho dòng báo"
+
+    # --- 5b. thu gọn: chụp ảnh mới KHÔNG tự bung dải đã ẩn ---
+    w._set_recent_expanded(False)
+    w.set_recent_captures(fake_items())
+    app.processEvents()
+    assert not w.is_recent_expanded(), "set_recent_captures không được tự bung dải"
+    assert w.recent_dock.isVisible(), "thu gọn vẫn giữ thanh tiêu đề"
+    assert w._recent_body.height() == 0, w._recent_body.height()
+    # bung lại: ảnh đang mở giữ highlight
+    w._set_recent_expanded(True)
+    assert w.is_recent_expanded()
+    assert selected_id(w) == 2, selected_id(w)
 
     # --- 6. load_image vẫn nhận capture_id=None (signature giữ nguyên) ---
     w.load_image(img)

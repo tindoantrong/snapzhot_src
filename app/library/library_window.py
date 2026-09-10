@@ -20,21 +20,23 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME
+from ..common import theme
 from ..common.update_banner import UpdateBanner
 from ..editor.tool_icons import tool_icon
 from .library_manager import THUMB_SIZE, Capture, LibraryManager
 
-# Theme tối tập trung, mirror palette EDITOR_QSS để Thư viện cùng style Editor.
-LIBRARY_QSS = """
-QMainWindow, QMainWindow > QWidget { background: #2B2D31; }
+# Stylesheet Thư viện dạng TEMPLATE, dùng chung bảng token với Editor nên hai
+# cửa sổ luôn cùng một theme (xem app/common/theme.py).
+LIBRARY_QSS_TPL = """
+QMainWindow, QMainWindow > QWidget { background: $bg; }
 QToolBar {
-    background: #33363B;
+    background: $surface;
     border: none;
     padding: 4px;
     spacing: 4px;
 }
 QToolButton {
-    color: #E8E8E8;
+    color: $text;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -42,58 +44,58 @@ QToolButton {
     font-size: 13px;
 }
 QToolButton:hover {
-    background: #3E4248;
-    border: 1px solid #55585E;
+    background: $elevated;
+    border: 1px solid $border;
 }
 QToolButton:checked {
-    background: #1E90FF;
-    color: #FFFFFF;
-    border: 1px solid #1E90FF;
+    background: $accent_fill;
+    color: $on_accent;
+    border: 1px solid $accent;
 }
-QToolButton:pressed { background: #187BDD; }
+QToolButton:pressed { background: $accent_pressed; }
 QLineEdit {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 6px;
     padding: 6px 10px;
 }
-QLineEdit:focus { border: 1px solid #1E90FF; }
+QLineEdit:focus { border: 1px solid $accent; }
 QPushButton {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 5px;
     padding: 6px 12px;
 }
-QPushButton:hover { background: #484C53; }
-QPushButton:pressed { background: #2F3338; }
-QListWidget { background: #2B2D31; border: none; }
+QPushButton:hover { background: $elevated_hi; }
+QPushButton:pressed { background: $pressed; }
+QListWidget { background: $bg; border: none; }
 QListWidget::item {
-    color: #E8E8E8;
+    color: $text;
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 4px;
 }
-QListWidget::item:selected { background: #1E90FF; color: #FFFFFF; }
-QListWidget::item:hover { background: #3E4248; border: 1px solid #55585E; }
-QLabel { color: #C8C8C8; }
-#captureBar { background: #33363B; }
-#emptyState { background: #3A3D42; border-radius: 8px; }
-#emptyTitle { color: #E8E8E8; font-size: 19px; font-weight: bold; }
-#emptySub { color: #9AA0A6; font-size: 13px; }
+QListWidget::item:selected { background: $accent_fill; color: $on_accent; }
+QListWidget::item:hover { background: $elevated; border: 1px solid $border; }
+QLabel { color: $text_dim; }
+#captureBar { background: $surface; }
+#emptyState { background: $void; border-radius: 8px; }
+#emptyTitle { color: $text; font-size: 19px; font-weight: bold; }
+#emptySub { color: $text_muted; font-size: 13px; }
 #emptyState QPushButton {
-    background: #1E90FF;
-    color: #FFFFFF;
+    background: $accent_fill;
+    color: $on_accent;
     border: none;
     border-radius: 6px;
     padding: 9px 16px;
     font-size: 13px;
 }
-#emptyState QPushButton:hover { background: #3AA0FF; }
-#emptyState QPushButton:pressed { background: #187BDD; }
-#emptyState QPushButton#secondary { background: #3E4248; border: 1px solid #55585E; }
-#emptyState QPushButton#secondary:hover { background: #484C53; }
+#emptyState QPushButton:hover { background: $accent_fill_hover; }
+#emptyState QPushButton:pressed { background: $accent_pressed; }
+#emptyState QPushButton#secondary { background: $elevated; border: 1px solid $border; }
+#emptyState QPushButton#secondary:hover { background: $elevated_hi; }
 """
 
 
@@ -194,8 +196,9 @@ class LibraryWindow(QMainWindow):
         bottom.addWidget(self.count_label)
         root.addLayout(bottom)
 
-        # Áp theme tập trung sau khi đã dựng widget.
-        self.setStyleSheet(LIBRARY_QSS)
+        # Áp theme tập trung sau khi đã dựng widget; theo dõi để đổi nóng.
+        self._apply_theme()
+        theme.manager.changed.connect(self._on_theme_changed)
 
         self.refresh()
 
@@ -215,6 +218,14 @@ class LibraryWindow(QMainWindow):
             act = QAction(tool_icon(icon_name), text, self)
             act.triggered.connect(signal.emit)
             tb.addAction(act)
+
+    def _apply_theme(self) -> None:
+        """Dựng lại stylesheet theo theme đang dùng."""
+        self.setStyleSheet(theme.qss(LIBRARY_QSS_TPL))
+
+    def _on_theme_changed(self, _mode: str) -> None:
+        self._apply_theme()
+        self.update()
 
     def refresh(self) -> None:
         """Dựng lại toàn bộ lưới. Tốn ~1ms/ảnh (mỗi thẻ đọc 1 thumbnail từ đĩa)

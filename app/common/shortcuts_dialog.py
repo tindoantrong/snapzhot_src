@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
+from . import theme
 from .config import load_config, save_config
 
 # ---------------------------------------------------------------------------
@@ -47,34 +48,34 @@ def _fmt_key(key: str) -> str:
     return "+".join(p.strip().title() for p in key.split("+"))
 
 
-_DIALOG_QSS = """
+_DIALOG_QSS_TPL = """
 QDialog {
-    background: #2B2D31;
-    color: #E8E8E8;
+    background: $bg;
+    color: $text;
 }
 #dlgTitle {
-    color: #FFFFFF;
+    color: $text;
     font-size: 18px;
     font-weight: bold;
 }
 #dlgSub {
-    color: #9AA0A6;
+    color: $text_muted;
     font-size: 13px;
 }
 #groupHeading {
-    color: #7EC8FF;
+    color: $accent_soft;
     font-size: 11px;
     font-weight: bold;
     letter-spacing: 1px;
 }
 #actionLabel {
-    color: #DDDDDD;
+    color: $text_soft;
     font-size: 13px;
 }
 #keycap {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 4px;
     padding: 2px 8px;
     font-family: "Courier New", Courier, monospace;
@@ -86,45 +87,45 @@ QScrollArea, QScrollArea > QWidget > QWidget {
     border: none;
 }
 QScrollBar:vertical {
-    background: #33363B;
+    background: $surface;
     width: 6px;
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: #55585E;
+    background: $border;
     border-radius: 3px;
     min-height: 24px;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QFrame#separator {
-    background: #3E4248;
+    background: $elevated;
 }
 QCheckBox {
-    color: #9AA0A6;
+    color: $text_muted;
     font-size: 12px;
     spacing: 6px;
 }
 QCheckBox::indicator {
     width: 14px;
     height: 14px;
-    border: 1px solid #55585E;
+    border: 1px solid $border;
     border-radius: 3px;
-    background: #33363B;
+    background: $surface;
 }
 QCheckBox::indicator:checked {
-    background: #1E90FF;
-    border-color: #1E90FF;
+    background: $accent;
+    border-color: $accent;
 }
 QPushButton#closeBtn {
-    background: #1E90FF;
-    color: #FFFFFF;
+    background: $accent_fill;
+    color: $on_accent;
     border: none;
     border-radius: 6px;
     padding: 7px 28px;
     font-size: 13px;
 }
-QPushButton#closeBtn:hover { background: #3AA0FF; }
-QPushButton#closeBtn:pressed { background: #187BDD; }
+QPushButton#closeBtn:hover { background: $accent_fill_hover; }
+QPushButton#closeBtn:pressed { background: $accent_pressed; }
 """
 
 
@@ -138,7 +139,7 @@ class ShortcutsDialog(QDialog):
         self.resize(520, 660)
         self.setModal(True)
         self._build_ui()
-        self.setStyleSheet(_DIALOG_QSS)
+        self.setStyleSheet(theme.qss(_DIALOG_QSS_TPL))
 
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
@@ -200,6 +201,7 @@ class ShortcutsDialog(QDialog):
         # Toàn cục: đọc từ config để hiển thị phím tắt thực tế của user.
         global_rows = [
             ("Chụp vùng chọn", _fmt_key(cfg.get("hotkey_region", "print screen"))),
+            ("Chụp cửa sổ đang dùng", _fmt_key(cfg.get("hotkey_window", "ctrl+alt+w"))),
             ("Bật/tắt quay video", _fmt_key(cfg.get("hotkey_video", "ctrl+shift+r"))),
         ]
         cl.addWidget(self._make_group("TOÀN CỤC (hệ thống)", global_rows))

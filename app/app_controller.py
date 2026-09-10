@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QImage
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QHBoxLayout,
@@ -34,9 +36,16 @@ from . import APP_NAME, __version__, updater
 from .capture import capture_manager
 from .capture.countdown_overlay import CountdownOverlay
 from .capture.region_selector import RegionSelector
-from .capture.window_selector import WindowSelector, window_capture_available
+from .capture.window_selector import (
+    WindowSelector,
+    active_window_target,
+    raise_window_no_focus,
+    window_capture_available,
+    window_frame_rect,
+)
 from .common import autostart
 from .common.assets import app_icon
+from .common import theme
 from .common.config import load_config, save_config
 from .common.paths import videos_dir
 from .editor.editor_window import EditorWindow
@@ -75,36 +84,36 @@ def _format_hotkey_display(kb_str: str) -> str:
     return " + ".join(parts)
 
 
-_UPDATE_QSS = """
-QDialog { background:#2B2D31; }
-QLabel { color:#C8C8C8; font-size:13px; }
-QLabel#title { color:#FFFFFF; font-size:15px; font-weight:bold; }
+_UPDATE_QSS_TPL = """
+QDialog { background:$bg; }
+QLabel { color:$text_dim; font-size:13px; }
+QLabel#title { color:$text; font-size:15px; font-weight:bold; }
 QTextEdit {
-    background:#1E1F22; color:#C8C8C8;
-    border:1px solid #3A3D42; border-radius:6px;
+    background:$sunken; color:$text_dim;
+    border:1px solid $elevated; border-radius:6px;
 }
 QPushButton {
-    background:#3A3D42; color:#FFFFFF; border:none;
+    background:$elevated; color:$text; border:none;
     border-radius:6px; padding:7px 16px;
 }
-QPushButton:hover { background:#44474D; }
-QPushButton#primary { background:#1E90FF; }
-QPushButton#primary:hover { background:#3AA0FF; }
-QPushButton:disabled { background:#2F3136; color:#7A7D82; }
+QPushButton:hover { background:$elevated_hi; }
+QPushButton#primary { background:$accent_fill; }
+QPushButton#primary:hover { background:$accent_fill_hover; }
+QPushButton:disabled { background:$disabled_bg; color:$disabled_fg; }
 /* Nút primary khi DISABLE: ID-selector #primary thắng :disabled về specificity nên
    phải có rule riêng (ID+pseudo) để hóa xám đúng, tránh hiểu nhầm còn bấm được. */
-QPushButton#primary:disabled { background:#2F3136; color:#7A7D82; }
+QPushButton#primary:disabled { background:$disabled_bg; color:$disabled_fg; }
 QProgressBar {
-    background:#1E1F22; border:1px solid #3A3D42; border-radius:4px;
-    text-align:center; color:#C8C8C8; font-size:11px;
+    background:$sunken; border:1px solid $elevated; border-radius:4px;
+    text-align:center; color:$text_dim; font-size:11px;
 }
-QProgressBar::chunk { background:#1E90FF; border-radius:3px; }
-QCheckBox { color:#C8C8C8; font-size:12px; spacing:6px; }
+QProgressBar::chunk { background:$accent; border-radius:3px; }
+QCheckBox { color:$text_dim; font-size:12px; spacing:6px; }
 QCheckBox::indicator {
-    width:14px; height:14px; border:1px solid #3A3D42;
-    border-radius:3px; background:#1E1F22;
+    width:14px; height:14px; border:1px solid $elevated;
+    border-radius:3px; background:$sunken;
 }
-QCheckBox::indicator:checked { background:#1E90FF; border-color:#1E90FF; }
+QCheckBox::indicator:checked { background:$accent; border-color:$accent; }
 """
 
 
@@ -204,7 +213,7 @@ class _UpdateDialog(QDialog):
 
         self.setWindowTitle(f"Cập nhật {APP_NAME}")
         self.setMinimumWidth(380)
-        self.setStyleSheet(_UPDATE_QSS)
+        self.setStyleSheet(theme.qss(_UPDATE_QSS_TPL))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 18)
@@ -428,10 +437,19 @@ class AppController(QObject):
     request_region = Signal()
     request_video_toggle = Signal()
     request_escape = Signal()
+    request_active_window = Signal()   # chụp ngay cửa sổ đang dùng (phím tắt)
 
     def __init__(self) -> None:
         super().__init__()
         self.config = load_config()
+        # Chốt theme TRƯỚC khi dựng cửa sổ để chúng sinh ra đã đúng màu, khỏi
+        # nháy một nhịp tối rồi mới sáng.
+        theme.manager.set_mode(self.config.get("theme", theme.DEFAULT_MODE))
+        _app = QApplication.instance()
+        if _app is not None:
+            theme.apply_to_app(_app)
+        theme.manager.changed.connect(self._on_theme_changed)
+
         self.library = LibraryManager()
 
         self.editor = EditorWindow()
@@ -444,6 +462,14 @@ class AppController(QObject):
         self.editor.open_capture_requested.connect(self._open_capture_in_editor)
         # Yêu cầu xoá ảnh từ dải "Ảnh gần đây" (xoá nền, không hỏi xác nhận).
         self.editor.delete_capture_requested.connect(self._on_delete_capture)
+        # Nhớ nền vùng ảnh (nút ô caro) — riêng biệt với theme sáng/tối.
+        self.editor.set_canvas_bg_index(int(self.config.get("canvas_bg", 0)))
+        self.editor.canvas_bg_changed.connect(self._on_canvas_bg_changed)
+        # Nhớ trạng thái thu gọn dải "Ảnh gần đây" qua các phiên chạy.
+        self.editor.set_recent_expanded(
+            self.config.get("recent_strip_expanded", True))
+        self.editor.recent_expanded_changed.connect(
+            self._on_recent_expanded_changed)
         self._unlink_signals = _UnlinkSignals()
         self._unlink_signals.done.connect(self._on_capture_files_unlinked)
         # capture_id đang xoá dở → có phải ảnh đang mở trong Editor không.
@@ -487,6 +513,9 @@ class AppController(QObject):
         self._esc_handle = None
         self._remove_region_hook = None  # cleanup handle cho hook_key PrtScn (tránh accumulate)
         self._hotkey_dialog_open = False  # guard: chặn capture khi dialog phím tắt đang mở
+        # Chống lặp cho "chụp app đang dùng": lib keyboard bắn callback trên MỌI
+        # KEY_DOWN, kể cả auto-repeat của OS → giữ phím 1 giây sẽ đẻ ~15 ảnh.
+        self._last_active_window_capture = 0.0
         # Watchdog phát hiện thread chết + periodic hard-restart phòng silent hook removal.
         self._hotkey_watchdog: QTimer | None = None
         self._hotkey_watchdog_tick: int = 0
@@ -515,6 +544,8 @@ class AppController(QObject):
         self.request_region.connect(self.capture_region, Qt.QueuedConnection)
         self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
+        self.request_active_window.connect(
+            self.capture_active_window, Qt.QueuedConnection)
 
         # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 30 phút.
         self._auto_check_done = False
@@ -530,6 +561,7 @@ class AppController(QObject):
             ("Chụp vùng chọn", self.capture_region),
             ("Chụp toàn màn hình", self.capture_fullscreen),
             ("Chụp cửa sổ", self.capture_window),
+            ("Chụp cửa sổ vừa dùng", self.capture_active_window),
         ):
             act = QAction(text, self)
             act.triggered.connect(slot)
@@ -773,6 +805,60 @@ class AppController(QObject):
             return
         self.window_selector.start()
 
+    # Khoảng chặn lặp cho chụp app đang dùng (auto-repeat bàn phím ~30ms/nhịp).
+    _ACTIVE_WINDOW_DEBOUNCE_S = 0.6
+
+    @Slot()
+    def capture_active_window(self) -> None:
+        """Chụp NGAY cửa sổ đang dùng, không cần rê chuột (dùng cho phím tắt).
+
+        Hai nhánh:
+        - Cửa sổ đang focus hợp lệ → nó nằm trên cửa sổ của app mình (Editor/Thư
+          viện không phải always-on-top) → chụp ngay, không ẩn gì, không chờ.
+        - Không lấy được foreground (đang mở menu khay, hoặc Editor vừa được đưa
+          lên sau lần chụp trước) → đoán theo Z-order, nâng cửa sổ đích lên, ẩn
+          cửa sổ của app, chờ OS vẽ lại rồi đọc lại khung và chụp.
+        """
+        if self._hotkey_dialog_open:
+            return  # Bỏ qua: dialog phím tắt đang mở
+        now = time.monotonic()
+        if now - self._last_active_window_capture < self._ACTIVE_WINDOW_DEBOUNCE_S:
+            return  # auto-repeat khi giữ phím → chỉ chụp 1 lần
+        self._last_active_window_capture = now
+
+        if not window_capture_available():
+            self.tray.showMessage(
+                APP_NAME, "Chụp cửa sổ cần pywin32 trên Windows."
+            )
+            return
+
+        target = active_window_target()
+        if target is None:
+            self.tray.showMessage(APP_NAME, "Không tìm thấy cửa sổ nào để chụp.")
+            return
+        hwnd, rect, from_foreground = target
+
+        # Overlay của app luôn nằm trên cùng → phải ẩn dù ở nhánh nào.
+        topmost_shown = self.record_bar.isVisible() or self.countdown_overlay.isVisible()
+        if from_foreground and not topmost_shown:
+            self._on_region_selected(rect)
+            return
+
+        if topmost_shown:
+            self.record_bar.hide()
+            self.countdown_overlay.hide()
+        # Ẩn cửa sổ app làm Windows kích hoạt + NÂNG cửa sổ kế tiếp, có thể che
+        # mất đích → nâng đích lên trước (không cướp focus).
+        raise_window_no_focus(hwnd)
+        self._hide_app_windows()
+        QTimer.singleShot(180, lambda: self._grab_window(hwnd, rect))
+
+    def _grab_window(self, hwnd: int, fallback_rect: QRect) -> None:
+        """Chụp cửa sổ hwnd sau khi đã ẩn cửa sổ app: đọc lại khung (cửa sổ có
+        thể vừa được restore/di chuyển), lùi về khung đã biết nếu đọc hụt."""
+        rect = window_frame_rect(hwnd) or fallback_rect
+        self._on_region_selected(rect)
+
     @Slot(int)
     def capture_fullscreen_delayed(self, seconds: int | None = None) -> None:
         """Chụp toàn màn hình sau N giây, kèm overlay đếm ngược."""
@@ -849,7 +935,10 @@ class AppController(QObject):
             image = capture_manager.capture_region(
                 rect.x(), rect.y(), rect.width(), rect.height()
             )
-        except ValueError:
+        except Exception:
+            # ValueError: kích thước <= 0. mss.ScreenShotError: rect ngoài màn
+            # hình / GDI lỗi — gặp được từ khi rect có thể đến thẳng từ Win32.
+            _log.warning("[capture] không chụp được vùng %s", rect, exc_info=True)
             return
         self._handle_new_capture(image)
 
@@ -945,6 +1034,21 @@ class AppController(QObject):
 
     def _clear_hotkey_dialog_guard(self) -> None:
         self._hotkey_dialog_open = False
+
+    def _on_theme_changed(self, mode: str) -> None:
+        """Ghi nhớ theme cho lần mở sau (stylesheet do theme tự áp lại)."""
+        self.config["theme"] = mode
+        save_config(self.config)
+
+    def _on_canvas_bg_changed(self, index: int) -> None:
+        """Ghi nhớ nền vùng ảnh cho lần mở sau."""
+        self.config["canvas_bg"] = int(index)
+        save_config(self.config)
+
+    def _on_recent_expanded_changed(self, expanded: bool) -> None:
+        """Ghi nhớ lựa chọn ẩn/hiện dải 'Ảnh gần đây' để lần mở sau giữ nguyên."""
+        self.config["recent_strip_expanded"] = bool(expanded)
+        save_config(self.config)
 
     def _on_startup_toggled(self, checked: bool) -> None:
         if not autostart.set_enabled(checked):
@@ -1286,6 +1390,18 @@ class AppController(QObject):
             )
         except Exception:
             # Một số máy cần quyền admin để hook bàn phím toàn cục.
+            pass
+
+        # Chụp ngay cửa sổ đang dùng. Dùng add_hotkey KHÔNG suppress (giống
+        # hotkey_video) → không đụng filtered_modifiers nên không tái phát bug
+        # kẹt Ctrl. Không cần lưu remove-handle: remove_all_hotkeys() trong
+        # reload_global_hotkeys() dọn sạch nonblocking_hotkeys.
+        try:
+            keyboard.add_hotkey(
+                self.config.get("hotkey_window", "ctrl+alt+w"),
+                lambda: self._emit_safe(self.request_active_window),
+            )
+        except Exception:
             pass
         self._start_hotkey_watchdog()
 

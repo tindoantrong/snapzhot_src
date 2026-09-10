@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME
+from ..common import theme
 from ..common.update_banner import UpdateBanner
 from .canvas import (
     STAMP_NAMES,
@@ -141,23 +142,34 @@ _PROPS_TAB_MARGINS = (3, 5, 3, 5)
 # Sàn bề rộng của tab còn lại ở mép phải khi panel thu gọn (px).
 _PROPS_TAB_MIN_WIDTH = 28
 
-# Theme tối tập trung cho toàn bộ cửa sổ Editor.
-EDITOR_QSS = """
-QMainWindow, QMainWindow > QWidget { background: #2B2D31; }
+# Dải "Ảnh gần đây": cao thanh tiêu đề (luôn hiện) và cao vùng thumbnail.
+_RECENT_TITLE_HEIGHT = 32
+_RECENT_BODY_HEIGHT = 96
+
+# Stylesheet Editor dạng TEMPLATE: $token được theme.qss() thay bằng mã màu
+# của theme đang dùng (xem app/common/theme.py).
+EDITOR_QSS_TPL = """
+QMainWindow, QMainWindow > QWidget { background: $bg; }
 QToolBar {
-    background: #33363B;
+    background: $surface;
     border: none;
     padding: 4px;
     spacing: 4px;
 }
-#captureBar, #toolBar, #zoomBar, #bottomBar { background: #33363B; }
+#captureBar, #toolBar, #zoomBar, #bottomBar { background: $surface; }
+/* QLabel trần trong toolbar không thừa hưởng màu chữ của QToolButton: bỏ quên
+   là chữ đen trên nền tối, chìm hẳn (đã xảy ra với mức zoom "100%"). */
+QToolBar QLabel { color: $text; font-size: 13px; }
+/* Mức zoom là SỐ ĐỌC, không phải nút: in đậm để không lẫn với nút "100%"
+   ngay bên cạnh, vẫn cùng màu chữ sáng của toolbar. */
+#zoomLabel { color: $text; font-size: 13px; font-weight: bold; }
 QToolBar::separator {
-    background: #4A4D52;
+    background: $border_subtle;
     width: 1px;
     margin: 4px 6px;
 }
 QToolButton {
-    color: #E8E8E8;
+    color: $text;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -165,162 +177,179 @@ QToolButton {
     font-size: 13px;
 }
 QToolButton:hover {
-    background: #3E4248;
-    border: 1px solid #55585E;
+    background: $elevated;
+    border: 1px solid $border;
 }
 QToolButton:checked {
-    background: #1E90FF;
-    color: #FFFFFF;
-    border: 1px solid #1E90FF;
+    background: $accent_fill;
+    color: $on_accent;
+    border: 1px solid $accent;
 }
-QToolButton:pressed { background: #187BDD; }
+QToolButton:pressed { background: $accent_pressed; }
 QDockWidget {
-    color: #E8E8E8;
+    color: $text;
     titlebar-close-icon: none;
     titlebar-normal-icon: none;
 }
 QDockWidget::title {
-    background: #33363B;
+    background: $surface;
     padding: 7px 10px;
-    color: #E8E8E8;
+    color: $text;
     font-weight: bold;
 }
-#propsPanel { background: #2B2D31; }
-#propsPanel QLabel { color: #DDDDDD; }
-#propsTitleBar { background: #33363B; }
-#propsTitle { color: #E8E8E8; font-weight: bold; }
+#propsPanel { background: $bg; }
+#propsPanel QLabel { color: $text_soft; }
+#propsTitleBar { background: $surface; }
+#propsTitle { color: $text; font-weight: bold; }
 #propsCollapseBtn {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 4px;
     padding: 3px;
 }
-#propsCollapseBtn:hover { background: #3E4248; border: 1px solid #55585E; }
-#propsCollapseBtn:pressed { background: #2F3338; }
+#propsCollapseBtn:hover { background: $elevated; border: 1px solid $border; }
+#propsCollapseBtn:pressed { background: $pressed; }
 QSlider::groove:horizontal {
     height: 4px;
-    background: #4A4D52;
+    background: $border_subtle;
     border-radius: 2px;
 }
 QSlider::handle:horizontal {
-    background: #1E90FF;
+    background: $accent;
     width: 14px;
     margin: -6px 0;
     border-radius: 7px;
 }
-QSlider::handle:horizontal:hover { background: #4AA8FF; }
+QSlider::handle:horizontal:hover { background: $accent_hover; }
 QSpinBox {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 4px;
     padding: 2px 4px;
 }
 #propsPanel QPushButton {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 5px;
     padding: 5px 8px;
 }
-#propsPanel QPushButton:hover { background: #484C53; }
-#propsPanel QPushButton:pressed { background: #2F3338; }
-QStatusBar { background: #222428; }
-QStatusBar, QStatusBar QLabel { color: #C8C8C8; }
+#propsPanel QPushButton:hover { background: $elevated_hi; }
+#propsPanel QPushButton:pressed { background: $pressed; }
+QStatusBar { background: $surface_alt; }
+QStatusBar, QStatusBar QLabel { color: $text_dim; }
 QStatusBar::item { border: none; }
-#emptyState { background: #3A3D42; }
-#emptyTitle { color: #E8E8E8; font-size: 19px; font-weight: bold; }
-#emptySub { color: #9AA0A6; font-size: 13px; }
+#emptyState { background: $void; }
+#emptyTitle { color: $text; font-size: 19px; font-weight: bold; }
+#emptySub { color: $text_muted; font-size: 13px; }
 #emptyState QPushButton {
-    background: #1E90FF;
-    color: #FFFFFF;
+    background: $accent_fill;
+    color: $on_accent;
     border: none;
     border-radius: 6px;
     padding: 9px 18px;
     font-size: 13px;
 }
-#emptyState QPushButton:hover { background: #3AA0FF; }
-#emptyState QPushButton:pressed { background: #187BDD; }
+#emptyState QPushButton:hover { background: $accent_fill_hover; }
+#emptyState QPushButton:pressed { background: $accent_pressed; }
 #emptyState QPushButton#secondary {
-    background: #3E4248;
-    border: 1px solid #55585E;
+    background: $elevated;
+    border: 1px solid $border;
 }
-#emptyState QPushButton#secondary:hover { background: #484C53; }
+#emptyState QPushButton#secondary:hover { background: $elevated_hi; }
+#recentTitleBar { background: $surface; }
+#recentTitleBar:hover { background: $elevated; }
+#recentTitle { color: $text; font-weight: bold; }
+#recentToggleBtn {
+    color: $text_dim;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 13px;
+}
+#recentToggleBtn:hover { background: $elevated; border: 1px solid $border; }
+#recentToggleBtn:pressed { background: $pressed; }
+#recentBody { background: $bg; }
+#recentEmpty { color: $text_muted; font-size: 13px; }
+#propsHint, #propsEmptyHint { color: $text_muted; }
+#statusSep { color: $border; }
 #recentStrip {
-    background: #2B2D31;
+    background: $bg;
     border: none;
     outline: none;
 }
 #recentStrip::item {
-    background: #33363B;
+    background: $surface;
     border: 1px solid transparent;
     border-radius: 6px;
     margin: 2px;
     padding: 2px;
 }
 #recentStrip::item:hover {
-    background: #3E4248;
-    border: 1px solid #55585E;
+    background: $elevated;
+    border: 1px solid $border;
 }
 #recentStrip::item:selected {
-    background: #1E3A5F;
-    border: 2px solid #1E90FF;
+    background: $selected_bg;
+    border: 2px solid $accent;
 }
 QMenu {
-    background: #33363B;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $surface;
+    color: $text;
+    border: 1px solid $border;
 }
 QMenu::item { padding: 6px 18px; }
-QMenu::item:selected { background: #1E90FF; color: #FFFFFF; }
+QMenu::item:selected { background: $accent_fill; color: $on_accent; }
 #toast {
     background: rgba(20, 20, 22, 235);
-    color: #FFFFFF;
-    border: 1px solid #55585E;
+    color: $on_accent;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 9px 18px;
     font-size: 13px;
 }
-#ocrPanel { background: #2B2D31; }
-#ocrPanel QLabel { color: #DDDDDD; }
+#ocrPanel { background: $bg; }
+#ocrPanel QLabel { color: $text_soft; }
 #ocrPanel QPlainTextEdit {
-    background: #33363B;
-    color: #E8E8E8;
-    border: 1px solid #4A4D52;
+    background: $surface;
+    color: $text;
+    border: 1px solid $border_subtle;
     border-radius: 4px;
     font-size: 13px;
     padding: 6px;
 }
 #ocrEntry {
-    background: #33363B;
-    border: 1px solid #4A4D52;
+    background: $surface;
+    border: 1px solid $border_subtle;
     border-radius: 6px;
 }
-#ocrEntry:hover { border-color: #1E90FF; }
-#ocrTimestamp { color: #9AA0A6; font-size: 11px; }
+#ocrEntry:hover { border-color: $accent; }
+#ocrTimestamp { color: $text_muted; font-size: 11px; }
 #ocrPanel QPushButton {
-    background: #3E4248;
-    color: #E8E8E8;
-    border: 1px solid #55585E;
+    background: $elevated;
+    color: $text;
+    border: 1px solid $border;
     border-radius: 5px;
     padding: 4px 8px;
     font-size: 12px;
 }
-#ocrPanel QPushButton:hover { background: #484C53; }
-#ocrPanel QPushButton:pressed { background: #2F3338; }
-#ocrEmptyHint { color: #9AA0A6; font-size: 13px; }
+#ocrPanel QPushButton:hover { background: $elevated_hi; }
+#ocrPanel QPushButton:pressed { background: $pressed; }
+#ocrEmptyHint { color: $text_muted; font-size: 13px; }
 #ocrProgress {
-    background: #2A3A4A;
-    border: 1px solid #1E90FF;
+    background: $selected_bg;
+    border: 1px solid $accent;
     border-radius: 6px;
 }
 #ocrProgressLabel {
-    color: #7EC8FF;
+    color: $accent_soft;
     font-size: 12px;
     padding: 4px 0;
 }
 #ocrProgressDots {
-    color: #1E90FF;
+    color: $accent;
     font-size: 13px;
     font-weight: bold;
 }
@@ -329,7 +358,6 @@ QMenu::item:selected { background: #1E90FF; color: #FFFFFF; }
 
 # Các màu nền canvas cycle theo thứ tự: Tối → Trắng → Đen.
 _BG_COLORS = ("#3A3D42", "#FFFFFF", "#000000")
-_BG_LABELS = ("Tối", "Trắng", "Đen")
 
 
 class RecentItemDelegate(QStyledItemDelegate):
@@ -381,6 +409,10 @@ class EditorWindow(QMainWindow):
     open_capture_requested = Signal(int)
     # Phát capture_id khi người dùng yêu cầu xoá ảnh từ dải "Ảnh gần đây".
     delete_capture_requested = Signal(int)
+    # Phát True/False khi người dùng mở/thu gọn dải "Ảnh gần đây" (để lưu cấu hình).
+    recent_expanded_changed = Signal(bool)
+    # Phát chỉ số nền vùng ảnh khi người dùng bấm nút ô caro (để lưu cấu hình).
+    canvas_bg_changed = Signal(int)
     # Phát khi người dùng muốn quay về thư viện.
     request_library = Signal()
     # Phát QImage khi người dùng yêu cầu OCR (ảnh toàn bộ hoặc vùng chọn).
@@ -420,8 +452,9 @@ class EditorWindow(QMainWindow):
         self._build_status_bar()
         self._build_overlays()
 
-        # Áp theme tập trung sau khi đã dựng widget.
-        self.setStyleSheet(EDITOR_QSS)
+        # Áp theme tập trung sau khi đã dựng widget; theo dõi để đổi nóng.
+        self._apply_theme()
+        theme.manager.changed.connect(self._on_theme_changed)
 
         self.canvas.step_number_changed.connect(self._sync_step_number)
         self.canvas.zoom_changed.connect(self._sync_zoom_label)
@@ -460,6 +493,37 @@ class EditorWindow(QMainWindow):
             act.setToolTip(tip)
             act.triggered.connect(signal.emit)
             tb.addAction(act)
+
+        # Đẩy nút Nền về sát mép phải: nó điều khiển CÁCH XEM (nền sáng/tối),
+        # không phải một tác vụ chụp — tách hẳn khỏi cụm bên trái. Ở hàng trên
+        # cùng nên luôn thấy, thay vì rơi vào overflow ">>" của thanh Zoom khi
+        # cửa sổ hẹp (dưới ~1600px là mất hút).
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+
+        # Nút cycle nền canvas: Tối → Trắng → Đen → ...
+        self._bg_index = 0
+        self._bg_cycle_action = QAction("Nền", self)
+        self._bg_cycle_action.setIcon(tool_icon("bg_cycle"))
+        self._bg_cycle_action.setToolTip("Đổi nền vùng ảnh")
+        self._bg_cycle_action.triggered.connect(self._cycle_canvas_bg)
+        tb.addAction(self._bg_cycle_action)
+        btn = tb.widgetForAction(self._bg_cycle_action)
+        if btn is not None:
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+
+        # Nút đổi giao diện sáng/tối — bên phải nút ô caro. Hai nút cạnh nhau
+        # nhưng KHÁC phạm vi: ô caro đổi nền sau ảnh, mặt trời/trăng đổi vỏ cả
+        # ứng dụng. Icon khác hẳn nhau nên không đọc nhầm.
+        self._theme_action = QAction("Giao diện", self)
+        self._theme_action.triggered.connect(self._toggle_theme)
+        tb.addAction(self._theme_action)
+        btn = tb.widgetForAction(self._theme_action)
+        if btn is not None:
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self._sync_theme_button()
+
         # Tách riêng một hàng để các thanh công cụ vẽ xuống dòng dưới.
         self.addToolBarBreak(Qt.TopToolBarArea)
 
@@ -554,34 +618,65 @@ class EditorWindow(QMainWindow):
                     btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
         self.zoom_label = QLabel("100%")
+        self.zoom_label.setObjectName("zoomLabel")
         self.zoom_label.setMinimumWidth(48)
         self.zoom_label.setAlignment(Qt.AlignCenter)
         tb.addWidget(self.zoom_label)
 
-        # Vạch phân cách: tách nhóm zoom (mức phóng) khỏi nút Nền. Cả hai cùng
-        # điều khiển "cách xem canvas" nên ở cạnh nhau, nhưng không được đọc
-        # nhầm thành nút zoom thứ ba.
-        tb.addSeparator()
+    # ---------- theme sáng/tối ----------
+    def _toggle_theme(self) -> None:
+        """Đổi giao diện toàn app ngay lập tức (không cần khởi động lại).
 
-        # Nút cycle nền canvas: Tối → Trắng → Đen → ...
-        self._bg_index = 0
-        self._bg_cycle_action = QAction("Nền", self)
-        self._bg_cycle_action.setIcon(tool_icon("bg_cycle"))
-        self._bg_cycle_action.setToolTip(
-            f"Nền canvas: {_BG_LABELS[0]} → bấm để đổi"
+        Chỉ báo cho theme manager; controller nghe tín hiệu đó để ghi nhớ vào
+        config, còn mọi cửa sổ tự dựng lại stylesheet của mình.
+        """
+        theme.manager.toggle()
+
+    def _sync_theme_button(self) -> None:
+        """Icon/tooltip nói về việc SẼ chuyển sang đâu, không phải đang ở đâu."""
+        dark = theme.is_dark()
+        self._theme_action.setIcon(
+            tool_icon("theme_sun" if dark else "theme_moon")
         )
-        self._bg_cycle_action.triggered.connect(self._cycle_canvas_bg)
-        tb.addAction(self._bg_cycle_action)
-        btn = tb.widgetForAction(self._bg_cycle_action)
-        if btn is not None:
-            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self._theme_action.setToolTip(
+            "Chuyển sang giao diện sáng" if dark
+            else "Chuyển sang giao diện tối"
+        )
+
+    def _apply_theme(self) -> None:
+        """Dựng lại stylesheet + các style inline theo theme đang dùng."""
+        self.setStyleSheet(theme.qss(EDITOR_QSS_TPL))
+        self._sync_theme_button()
+        # Tab thu gọn của panel Thuộc tính vẽ bằng style inline → phải tự vá.
+        if getattr(self, "_props_titlebar", None) is not None                 and not self._props_expanded:
+            self._props_titlebar.setStyleSheet(
+                f"#propsTitleBar {{ background: {theme.color('surface')}; "
+                "border-bottom-left-radius: 6px; }"
+            )
+
+    def _on_theme_changed(self, _mode: str) -> None:
+        self._apply_theme()
+        self.update()
 
     def _cycle_canvas_bg(self) -> None:
-        """Cycle nền canvas: Tối → Trắng → Đen → ..."""
-        self._bg_index = (self._bg_index + 1) % 3
-        color, label = _BG_COLORS[self._bg_index], _BG_LABELS[self._bg_index]
-        self.canvas.setBackgroundBrush(QColor(color))
-        self._bg_cycle_action.setToolTip(f"Nền canvas: {label} → bấm để đổi")
+        """Cycle nền VÙNG ẢNH: Tối → Trắng → Đen → ...
+
+        Nền vùng ảnh KHÔNG dính theme sáng/tối: đây là phông sau bức ảnh, người
+        dùng chọn theo ảnh đang sửa nên được nhớ riêng.
+        """
+        self._set_canvas_bg_index(self._bg_index + 1)
+        self.canvas_bg_changed.emit(self._bg_index)
+
+    def set_canvas_bg_index(self, index: int) -> None:
+        """Khôi phục nền vùng ảnh từ cấu hình (không phát tín hiệu ngược)."""
+        self._set_canvas_bg_index(index)
+
+    def canvas_bg_index(self) -> int:
+        return self._bg_index
+
+    def _set_canvas_bg_index(self, index: int) -> None:
+        self._bg_index = int(index) % len(_BG_COLORS)
+        self.canvas.setBackgroundBrush(QColor(_BG_COLORS[self._bg_index]))
 
     def _sync_zoom_label(self, percent: float) -> None:
         text = f"{round(percent)}%"
@@ -803,13 +898,13 @@ class EditorWindow(QMainWindow):
             "Công cụ này không có thuộc tính tuỳ chỉnh."
         )
         self._empty_group.setWordWrap(True)
-        self._empty_group.setStyleSheet("color:#9AA0A6;")
+        self._empty_group.setObjectName("propsEmptyHint")
         layout.addWidget(self._empty_group)
 
         layout.addStretch(1)
         hint = QLabel("Mẹo: chọn công cụ 'Chọn' rồi nhấn Delete để xoá đối tượng.")
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9AA0A6;")
+        hint.setObjectName("propsHint")
         layout.addWidget(hint)
 
         dock.setWidget(panel)
@@ -862,7 +957,7 @@ class EditorWindow(QMainWindow):
         )
         self._props_titlebar.setStyleSheet(
             "" if expanded else
-            "#propsTitleBar { background: #33363B; "
+            f"#propsTitleBar {{ background: {theme.color('surface')}; "
             "border-bottom-left-radius: 6px; }"
         )
 
@@ -1178,6 +1273,39 @@ class EditorWindow(QMainWindow):
         dock.setAllowedAreas(Qt.BottomDockWidgetArea)
         dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
+        # Thanh tiêu đề tự dựng, cao ~32px: nhãn + số ảnh bên trái, nút ẩn/hiện
+        # bên phải — ngay phía trên dải thumbnail nó điều khiển. Bấm bất kỳ đâu
+        # trên thanh cũng đổi trạng thái (xử lý ở eventFilter).
+        titlebar = QWidget()
+        titlebar.setObjectName("recentTitleBar")
+        titlebar.setFixedHeight(_RECENT_TITLE_HEIGHT)
+        # Thanh phải chiếm hết bề ngang: lúc thu gọn, dock chỉ còn thanh tiêu đề
+        # nên nếu để nó co theo nội dung thì cả dock teo lại thành một mẩu ở góc.
+        titlebar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        titlebar.setCursor(Qt.PointingHandCursor)
+        titlebar.installEventFilter(self)
+        tl = QHBoxLayout(titlebar)
+        tl.setContentsMargins(10, 0, 6, 0)
+        tl.setSpacing(4)
+        self._recent_title_label = QLabel("Ảnh gần đây · 0")
+        self._recent_title_label.setObjectName("recentTitle")
+        # Nhãn trong suốt với chuột → click rơi thẳng xuống thanh tiêu đề.
+        self._recent_title_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        tl.addWidget(self._recent_title_label)
+        tl.addStretch(1)
+        self._recent_toggle_btn = QToolButton()
+        self._recent_toggle_btn.setObjectName("recentToggleBtn")
+        self._recent_toggle_btn.setAutoRaise(True)
+        self._recent_toggle_btn.setIconSize(QSize(14, 14))
+        self._recent_toggle_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self._recent_toggle_btn.setCursor(Qt.PointingHandCursor)
+        self._recent_toggle_btn.clicked.connect(
+            lambda: self._set_recent_expanded(not self._recent_expanded)
+        )
+        tl.addWidget(self._recent_toggle_btn)
+        dock.setTitleBarWidget(titlebar)
+        self._recent_titlebar = titlebar
+
         strip = QListWidget()
         strip.setObjectName("recentStrip")
         strip.setViewMode(QListWidget.IconMode)
@@ -1201,19 +1329,42 @@ class EditorWindow(QMainWindow):
         self._recent_delegate = RecentItemDelegate()
         strip.setItemDelegate(self._recent_delegate)
 
+        # Trạng thái rỗng nằm CÙNG chỗ với dải: mở ra vẫn thấy panel có nội dung
+        # thay vì một khoảng trống không lời giải thích.
+        empty = QLabel("Chưa có ảnh gần đây")
+        empty.setObjectName("recentEmpty")
+        empty.setAlignment(Qt.AlignCenter)
+        empty.setFixedHeight(_RECENT_BODY_HEIGHT)
+        empty.hide()
+
+        body = QWidget()
+        body.setObjectName("recentBody")
+        bl = QVBoxLayout(body)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(0)
+        bl.addWidget(strip)
+        bl.addWidget(empty)
+
         self.recent_strip = strip
         self.recent_dock = dock
+        self._recent_body = body
+        self._recent_empty = empty
+        self._recent_expanded = True
         # Thẻ đã gỡ khỏi dải nhưng controller chưa xoá xong: {id: (dòng, item)}.
         # Giữ lại để trả về đúng chỗ nếu thao tác xoá thất bại.
         self._removed_recents: dict[int, tuple[int, QListWidgetItem]] = {}
-        dock.setWidget(strip)
+        dock.setWidget(body)
         self.addDockWidget(Qt.BottomDockWidgetArea, dock)
-        dock.hide()
+        self._refresh_recent_title()
+        self._set_recent_expanded(True, notify=False)
 
     def set_recent_captures(self, items: list[dict]) -> None:
         """Dựng lại dải thumbnail. item = {"id": int, "thumb": str, "label": str}.
 
-        Rỗng → ẩn dock. Sau khi dựng, đồng bộ highlight theo ảnh đang mở.
+        KHÔNG đụng tới trạng thái mở/thu gọn: chụp ảnh mới không được tự bung
+        dải mà người dùng đã chủ động ẩn. Rỗng → thanh tiêu đề vẫn còn (đếm 0)
+        và phần thân đổi sang dòng "Chưa có ảnh gần đây". Sau khi dựng, đồng bộ
+        highlight theo ảnh đang mở.
         """
         self.recent_strip.clear()
         self._removed_recents.clear()  # dựng lại từ nguồn thật → bỏ bản lưu tạm
@@ -1225,8 +1376,65 @@ class EditorWindow(QMainWindow):
             lw.setToolTip(str(it.get("label", "")))
             lw.setSizeHint(QSize(84, 84))
             self.recent_strip.addItem(lw)
-        self.recent_dock.setVisible(bool(items))
+        self._refresh_recent_title()
         self._sync_recent_highlight()
+
+    # ---------- thu gọn / mở dải ----------
+    def _refresh_recent_title(self) -> None:
+        """Cập nhật nhãn "Ảnh gần đây · N" và chọn thân dải hay dòng rỗng."""
+        count = self.recent_strip.count()
+        self._recent_title_label.setText(f"Ảnh gần đây · {count}")
+        has_items = count > 0
+        self.recent_strip.setVisible(has_items)
+        self._recent_empty.setVisible(not has_items)
+
+    def set_recent_expanded(self, expanded: bool) -> None:
+        """Đặt trạng thái mở/thu gọn từ ngoài (controller khôi phục cấu hình).
+
+        Không phát recent_expanded_changed — đây là khôi phục, không phải lựa
+        chọn mới của người dùng.
+        """
+        self._set_recent_expanded(bool(expanded), notify=False)
+
+    def is_recent_expanded(self) -> bool:
+        return self._recent_expanded
+
+    def _set_recent_expanded(self, expanded: bool, notify: bool = True) -> None:
+        """Mở/thu gọn dải ảnh gần đây.
+
+        Thu gọn CHỈ giấu phần thân: thanh tiêu đề 32px ở đáy vẫn còn để bật lại
+        (nút điều khiển không biến mất cùng thứ nó điều khiển), và vùng chỉnh
+        sửa tự nở xuống chiếm chỗ dải vừa nhường.
+        """
+        expanded = bool(expanded)
+        dock = self.recent_dock
+        body = self._recent_body
+        # Thu gọn bằng cách ép phần thân về cao 0 chứ KHÔNG hide(): dock ẩn hẳn
+        # widget nội dung sẽ tự siết bề ngang về sizeHint của thanh tiêu đề,
+        # biến thanh thành một mẩu ở góc trái thay vì trải hết đáy cửa sổ.
+        body.setEnabled(expanded)  # tránh Tab/Delete lọt vào dải đang thu gọn
+        self._recent_toggle_btn.setIcon(
+            tool_icon("chevron_down" if expanded else "chevron_up", size=14)
+        )
+        self._recent_toggle_btn.setText("Ẩn" if expanded else "Hiện")
+        self._recent_toggle_btn.setToolTip(
+            "Thu gọn dải ảnh gần đây" if expanded else "Mở dải ảnh gần đây"
+        )
+        if expanded:
+            body.setMinimumHeight(0)
+            body.setMaximumHeight(_QWIDGETSIZE_MAX)
+            dock.setMinimumHeight(0)
+            dock.setMaximumHeight(_QWIDGETSIZE_MAX)
+            # Bung lại mới cuộn tới được ảnh đang mở (lúc thu gọn không cuộn nổi).
+            self._sync_recent_highlight()
+        else:
+            body.setFixedHeight(0)
+            dock.setFixedHeight(_RECENT_TITLE_HEIGHT)
+
+        changed = expanded != self._recent_expanded
+        self._recent_expanded = expanded
+        if notify and changed:
+            self.recent_expanded_changed.emit(expanded)
 
     def _sync_recent_highlight(self) -> None:
         """Chọn item khớp _current_capture_id (hiển thị, KHÔNG phát signal)."""
@@ -1285,8 +1493,7 @@ class EditorWindow(QMainWindow):
         for i in range(self.recent_strip.count()):
             if self.recent_strip.item(i).data(Qt.UserRole) == capture_id:
                 self._removed_recents[capture_id] = (i, self.recent_strip.takeItem(i))
-                if self.recent_strip.count() == 0:
-                    self.recent_dock.setVisible(False)
+                self._refresh_recent_title()
                 return True
         return False
 
@@ -1297,7 +1504,7 @@ class EditorWindow(QMainWindow):
             return False
         row, item = entry
         self.recent_strip.insertItem(min(row, self.recent_strip.count()), item)
-        self.recent_dock.setVisible(True)
+        self._refresh_recent_title()
         self._sync_recent_highlight()
         return True
 
@@ -1320,7 +1527,7 @@ class EditorWindow(QMainWindow):
         self.status_size = QLabel("—")
         self.status_zoom = QLabel("100%")
         sep = QLabel("│")
-        sep.setStyleSheet("color:#55585E;")
+        sep.setObjectName("statusSep")
         sb.addPermanentWidget(self.status_size)
         sb.addPermanentWidget(sep)
         sb.addPermanentWidget(self.status_zoom)
@@ -1398,6 +1605,11 @@ class EditorWindow(QMainWindow):
         viewport.installEventFilter(self)
 
     def eventFilter(self, obj, event):
+        # Bấm bất kỳ đâu trên thanh tiêu đề "Ảnh gần đây" → mở/thu gọn dải.
+        if obj is getattr(self, "_recent_titlebar", None)                 and event.type() == QEvent.MouseButtonRelease                 and event.button() == Qt.LeftButton                 and self._recent_titlebar.rect().contains(
+                    event.position().toPoint()):
+            self._set_recent_expanded(not self._recent_expanded)
+            return True
         # Phím Delete trên dải ảnh gần đây → yêu cầu xoá item đang chọn.
         if obj is getattr(self, "recent_strip", None) \
                 and event.type() == QEvent.KeyPress \

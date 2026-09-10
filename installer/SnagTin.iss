@@ -6,7 +6,7 @@
 ; ============================================================================
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.37"
+  #define MyAppVersion "0.1.38"
 #endif
 
 #define MyAppName "SnagTin"

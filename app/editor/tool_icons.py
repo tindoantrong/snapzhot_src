@@ -9,20 +9,31 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QIcon,
+    QIconEngine,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 
-# Cache: khoá (name, color, size) -> QIcon đã vẽ.
+from ..common import theme
+
+# Cache: khoá (name, color, size) -> QIcon đã vẽ. color="" nghĩa là icon THEO
+# THEME (màu quyết định lúc vẽ, không phải lúc tạo).
 _CACHE: dict[tuple[str, str, int], QIcon] = {}
+# Cache pixmap thô dùng chung cho cả icon tĩnh lẫn icon theo theme.
+_PIX_CACHE: dict[tuple[str, str, int], QPixmap] = {}
 
 
-def tool_icon(name: str, color: str = "#E8E8E8", size: int = 26) -> QIcon:
-    """Trả về QIcon line-art cho `name`, vẽ runtime và cache lại.
-
-    name: tên icon (xem _DRAWERS). color: màu nét (hex). size: cạnh pixmap (px).
-    """
+def _render(name: str, color: str, size: int) -> QPixmap:
+    """Vẽ một icon line-art ra QPixmap nền trong suốt."""
     key = (name, color, size)
-    cached = _CACHE.get(key)
+    cached = _PIX_CACHE.get(key)
     if cached is not None:
         return cached
 
@@ -46,9 +57,64 @@ def tool_icon(name: str, color: str = "#E8E8E8", size: int = 26) -> QIcon:
         drawer(painter, rect, qcolor)
     painter.end()
 
-    icon = QIcon(pm)
+    _PIX_CACHE[key] = pm
+    return pm
+
+
+class _ThemedIconEngine(QIconEngine):
+    """Icon lấy màu từ theme ĐANG dùng, ngay lúc được yêu cầu vẽ.
+
+    Vì sao không gán icon màu cố định rồi đổi lại khi chuyển theme: icon nằm
+    trong ~30 QAction dựng rải rác lúc khởi tạo cửa sổ; đi gán lại từng cái là
+    vừa dài vừa dễ sót. Đọc màu tại thời điểm vẽ thì một QIcon duy nhất tự đúng
+    màu ở cả hai theme.
+    """
+
+    def __init__(self, name: str, size: int) -> None:
+        super().__init__()
+        self._name = name
+        self._size = size
+
+    def _color(self, mode) -> str:
+        return theme.color("icon_disabled" if mode == QIcon.Disabled else "icon")
+
+    def pixmap(self, size: QSize, mode, state) -> QPixmap:
+        px = max(1, min(size.width(), size.height()))
+        return _render(self._name, self._color(mode), px)
+
+    def paint(self, painter: QPainter, rect, mode, state) -> None:
+        painter.drawPixmap(rect, self.pixmap(rect.size(), mode, state))
+
+    def actualSize(self, size: QSize, mode, state) -> QSize:
+        px = max(1, min(size.width(), size.height()))
+        return QSize(px, px)
+
+    def clone(self) -> "_ThemedIconEngine":
+        return _ThemedIconEngine(self._name, self._size)
+
+
+def tool_icon(name: str, color: str | None = None, size: int = 26) -> QIcon:
+    """Trả về QIcon line-art cho `name`, vẽ runtime và cache lại.
+
+    name: tên icon (xem _DRAWERS). size: cạnh pixmap (px).
+    color: mã màu cố định; để None (mặc định) thì icon ĐI THEO THEME sáng/tối.
+    """
+    key = (name, color or "", size)
+    cached = _CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    icon = QIcon(_ThemedIconEngine(name, size)) if color is None         else QIcon(_render(name, color, size))
     _CACHE[key] = icon
     return icon
+
+
+def _invalidate_cache() -> None:
+    """Đổi theme → bỏ pixmap cũ (khoá có màu nên chỉ là dọn bộ nhớ cho gọn)."""
+    _PIX_CACHE.clear()
+
+
+theme.manager.add_invalidator(_invalidate_cache)
 
 
 # ---------- các hàm vẽ từng icon ----------
@@ -444,18 +510,67 @@ def _draw_chevron_left(painter, rect, color):
     painter.drawLine(_p(rect, 0.34, 0.50), _p(rect, 0.66, 0.90))
 
 
+def _draw_chevron_down(painter, rect, color):
+    """Chevron ▾ — dải ảnh đang mở, bấm để thu gọn xuống thanh tiêu đề."""
+    painter.drawLine(_p(rect, 0.15, 0.35), _p(rect, 0.50, 0.68))
+    painter.drawLine(_p(rect, 0.50, 0.68), _p(rect, 0.85, 0.35))
+
+
+def _draw_chevron_up(painter, rect, color):
+    """Chevron ▴ — dải ảnh đang thu gọn, bấm để mở lại."""
+    painter.drawLine(_p(rect, 0.15, 0.65), _p(rect, 0.50, 0.32))
+    painter.drawLine(_p(rect, 0.50, 0.32), _p(rect, 0.85, 0.65))
+
+
+def _draw_sun(painter, rect, color):
+    """Mặt trời — ĐANG ở giao diện tối, bấm để sang sáng."""
+    c = rect.center()
+    r = rect.width() * 0.24
+    painter.drawEllipse(c, r, r)
+    for i in range(8):
+        a = math.radians(i * 45)
+        dx, dy = math.cos(a), math.sin(a)
+        painter.drawLine(QPointF(c.x() + dx * r * 1.7, c.y() + dy * r * 1.7),
+                         QPointF(c.x() + dx * r * 2.25, c.y() + dy * r * 2.25))
+
+
+def _draw_moon(painter, rect, color):
+    """Trăng khuyết — ĐANG ở giao diện sáng, bấm để sang tối."""
+    c = rect.center()
+    r = rect.width() * 0.44
+    full = QPainterPath()
+    full.addEllipse(c, r, r)
+    cut = QPainterPath()
+    cut.addEllipse(QPointF(c.x() + r * 0.62, c.y() - r * 0.46), r * 0.92, r * 0.92)
+    painter.drawPath(full.subtracted(cut))
+
+
 def _draw_bg_cycle(painter, rect, color):
-    """Half-filled circle — nút chuyển theme sáng/tối (contrast icon)."""
-    cx, cy = rect.center().x(), rect.center().y()
-    r = rect.width() * 0.42
-    # Tô nửa phải solid (top → right arc → bottom, close = đường kính)
-    path = QPainterPath()
-    path.moveTo(cx, cy - r)
-    path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 90, -180)
-    path.closeSubpath()
-    painter.fillPath(path, QBrush(color))
-    # Viền tròn đầy đủ
-    painter.drawEllipse(QPointF(cx, cy), r, r)
+    """Ô caro — nền của VÙNG ẢNH.
+
+    Cố ý KHÔNG dùng mặt trời/mặt trăng: hai glyph đó đã mang nghĩa "theme sáng
+    /tối của cả ứng dụng". Ô caro là quy ước quen thuộc cho nền vùng ảnh (kiểu
+    ô trong suốt), nên không ai đọc nhầm thành nút đổi theme toàn app.
+    """
+    rad = rect.width() * 0.14
+    frame = QPainterPath()
+    frame.addRoundedRect(rect, rad, rad)
+
+    # Tô xen kẽ 2x2; clip theo khung bo góc để 4 góc không bị vuông trở lại.
+    # 2x2 (không phải 3x3): ở cỡ toolbar 26px, ô 3x3 chỉ còn ~5px nên nhoè
+    # thành một khối đặc lấm chấm, nặng hẳn so với bộ icon line-art xung quanh.
+    painter.save()
+    painter.setClipPath(frame)
+    cw, ch = rect.width() / 2.0, rect.height() / 2.0
+    for row in range(2):
+        for col in range(2):
+            if (row + col) % 2 == 0:
+                painter.fillRect(
+                    QRectF(rect.left() + col * cw, rect.top() + row * ch, cw, ch),
+                    QBrush(color),
+                )
+    painter.restore()
+    painter.drawPath(frame)
 
 
 _DRAWERS = {
@@ -490,5 +605,9 @@ _DRAWERS = {
     "ocr": _draw_ocr,
     "chevron_right": _draw_chevron_right,
     "chevron_left": _draw_chevron_left,
+    "chevron_down": _draw_chevron_down,
+    "chevron_up": _draw_chevron_up,
     "bg_cycle": _draw_bg_cycle,
+    "theme_sun": _draw_sun,
+    "theme_moon": _draw_moon,
 }
