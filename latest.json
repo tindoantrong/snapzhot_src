@@ -1,5 +1,5 @@
 {
-  "version": "0.1.37",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.37.exe",
-  "notes": "Cửa sổ chỉnh sửa nay mở ảnh ở đúng 100% (1 pixel ảnh = 1 pixel màn hình) thay vì tự co vừa khung: ảnh chụp full-screen không còn bị thu nhỏ, ảnh nhỏ không còn bị phóng to. Cắt ảnh (Crop) xong cũng giữ 100% và canh giữa khung. Nhấn Ctrl+0 để xem vừa khung, Ctrl+1 để về 100%."
+  "version": "0.1.38",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.38.exe",
+  "notes": "Giao diện sáng/tối cho toàn ứng dụng: nút mặt trời/mặt trăng ở góc phải thanh công cụ trên cùng, đổi ngay không cần khởi động lại và nhớ lựa chọn cho lần mở sau (áp cho Editor, Thư viện và các hộp thoại). Dải ảnh gần đây thu gọn được thành thanh tiêu đề mỏng ở đáy Editor để mở rộng vùng chỉnh sửa, có đếm số ảnh và nhớ trạng thái. Nút đổi nền vùng ảnh chuyển sang icon ô caro, dời lên góc phải thanh trên cùng nên không còn bị giấu khi cửa sổ hẹp. Sửa lỗi nhãn mức zoom 100% bị chữ đen chìm vào nền tối."
 }
