@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QToolBar,
@@ -144,6 +145,8 @@ class LibraryWindow(QMainWindow):
         self.list.setMovement(QListWidget.Static)
         self.list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.list.itemDoubleClicked.connect(self._open_selected)
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._show_item_menu)
         root.addWidget(self.list, 1)
 
         # Trạng thái rỗng chuyên nghiệp (mirror empty-state của Editor).
@@ -381,6 +384,51 @@ class LibraryWindow(QMainWindow):
                 subprocess.Popen(["xdg-open", path])
         except OSError as exc:
             QMessageBox.warning(self, "Không mở được video", str(exc))
+
+    def _show_item_menu(self, pos) -> None:
+        """Chuột phải lên ảnh/video: menu thao tác trên mục đó."""
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        # Chuột phải lên mục chưa chọn → chọn riêng mục đó (giống Explorer).
+        if not item.isSelected():
+            self.list.clearSelection()
+            item.setSelected(True)
+        self.list.setCurrentItem(item)
+        menu = QMenu(self)
+        menu.addAction("Mở thư mục chứa file", self._reveal_selected_in_explorer)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _reveal_selected_in_explorer(self) -> None:
+        """Mở Windows Explorer tại thư mục chứa file, bôi chọn sẵn file đó."""
+        import os
+        import subprocess
+        import sys
+
+        cid = self._selected_id()
+        if cid is None:
+            return
+        cap = self.library.get(cid)
+        if cap is None:
+            return
+        path = os.path.normpath(cap.path)
+        folder = os.path.dirname(path)
+        try:
+            if sys.platform == "win32":
+                if os.path.isfile(path):
+                    # Truyền chuỗi (không phải list): explorer cần đúng dạng
+                    # /select,"<path>" — list sẽ bị quote sai khi path có dấu phẩy.
+                    subprocess.Popen(f'explorer /select,"{path}"')
+                elif os.path.isdir(folder):
+                    os.startfile(folder)  # type: ignore[attr-defined]
+                else:
+                    raise OSError(f"Không còn thư mục:\n{folder}")
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except OSError as exc:
+            QMessageBox.warning(self, "Không mở được thư mục", str(exc))
 
     def _edit_tags(self) -> None:
         cid = self._selected_id()

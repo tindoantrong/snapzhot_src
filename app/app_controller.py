@@ -490,6 +490,11 @@ class AppController(QObject):
         self.library_window.request_capture_region.connect(self.capture_region)
         self.library_window.request_capture_fullscreen.connect(self.capture_fullscreen)
         self.library_window.request_video.connect(self.toggle_video_recording)
+        # Banner "Có bản mới": không tải thẳng trên banner, mở hộp thoại cập nhật.
+        self.library_window.update_banner.update_requested.connect(
+            self._open_update_dialog_and_check)
+        self.editor.update_banner.update_requested.connect(
+            self._open_update_dialog_and_check)
 
         self.region_selector = RegionSelector()
         self.region_selector.region_selected.connect(self._on_region_selected)
@@ -679,6 +684,16 @@ class AppController(QObject):
         self._update_dialog = dlg
         dlg.show()
 
+    def _open_update_dialog_and_check(self) -> None:
+        """Nhấn "Cập nhật ngay" trên banner: mở hộp thoại và kiểm tra luôn, để
+        hộp thoại hiện sẵn bản mới + nút "Tải về" (không bắt bấm thêm lần nữa)."""
+        if self._update_dialog is not None:
+            self._open_update_dialog()  # đang mở (có thể đang tải) → chỉ đưa lên
+            return
+        self._open_update_dialog()
+        self._update_dialog.show_checking()
+        self._start_update_check()
+
     def _start_update_check(self) -> None:
         """Chạy check_for_updates ở luồng nền (chặn tới 8s → không trên GUI)."""
         if self._update_thread is not None:
@@ -745,6 +760,10 @@ class AppController(QObject):
         """Nhận kết quả auto-check: hiển thị banner + tray notification nếu có bản mới."""
         # Lên lịch kiểm tra lại (bất kể kết quả).
         QTimer.singleShot(self._AUTO_CHECK_INTERVAL_MS, self._auto_check_for_updates)
+        # Hộp thoại mở đúng lúc auto-check đang chạy (_start_update_check bỏ qua
+        # vì đã có luồng) → đang chờ "Đang kiểm tra…" → trả kết quả cho nó.
+        if self._update_dialog is not None and self._update_dialog._mode == "checking":
+            self._update_dialog.show_result(info)
         # Hiện banner cập nhật trên cả thư viện và editor.
         self.library_window.update_banner.show_update(info)
         self.editor.update_banner.show_update(info)
