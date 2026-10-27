@@ -43,7 +43,6 @@ App chạy ở **khay hệ thống** (system tray). Phím tắt mặc định:
 |------|-----------|
 | `Ctrl+Shift+A` | Chụp vùng chọn |
 | `Ctrl+Shift+F` | Chụp toàn màn hình |
-| `Ctrl+Shift+R` | Bật/tắt quay video |
 
 Hoặc **chuột phải vào icon ở khay hệ thống** để mở menu đầy đủ.
 

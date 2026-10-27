@@ -11,7 +11,7 @@ Giải quyết bug: menu xổ ra trên web bị đóng khi overlay lấy focus.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -37,12 +37,22 @@ class RegionSelector(QWidget):
         self._frozen_image: QImage | None = None   # ảnh gốc (để cắt)
         self._frozen_pixmap: QPixmap | None = None  # pixmap (để vẽ nhanh)
 
-        # Phủ toàn bộ vùng ảo (gộp mọi màn hình).
+        self._virtual_origin = QPoint()
+        self._fit_virtual_desktop()
+
+    def _fit_virtual_desktop(self) -> bool:
+        """Phủ toàn bộ vùng ảo (gộp mọi màn hình). Trả True nếu có >1 màn hình.
+
+        Tính lại mỗi lần start(): cắm/rút màn hình hoặc đổi độ phân giải sau khi
+        mở app làm khung cũ lệch với ảnh đóng băng (ảnh bị kéo giãn, nhoè).
+        """
+        screens = QGuiApplication.screens()
         geo = QRect()
-        for screen in QGuiApplication.screens():
+        for screen in screens:
             geo = geo.united(screen.geometry())
         self._virtual_origin = geo.topLeft()
         self.setGeometry(geo)
+        return len(screens) > 1
 
     def start(self, frozen_bg: QImage | None = None) -> None:
         self._origin = None
@@ -54,9 +64,29 @@ class RegionSelector(QWidget):
         else:
             self._frozen_image = None
             self._frozen_pixmap = None
-        self.showFullScreen()
+        if self._fit_virtual_desktop():
+            # Nhiều màn hình: showFullScreen() chỉ phủ MỘT màn hình → ảnh đóng
+            # băng của cả vùng ảo bị ép vào đó (nhoè, lệch toạ độ) và các màn
+            # hình còn lại không chọn được. Giữ khung vùng ảo, hiện thường.
+            self.setWindowState(Qt.WindowNoState)
+            self.show()
+        else:
+            self.showFullScreen()
         self.raise_()
         self.activateWindow()
+        # Gọi từ hotkey (app đang nền) Windows có thể từ chối cướp foreground ở
+        # lần đầu → thử lại để overlay nhận được Esc.
+        QTimer.singleShot(50, self._reactivate)
+
+    def _reactivate(self) -> None:
+        if self.isVisible():
+            self.raise_()
+            self.activateWindow()
+
+    def cancel(self) -> None:
+        """Hủy chọn vùng từ bên ngoài (Esc toàn cục)."""
+        if self.isVisible():
+            self._finish_cancel()
 
     # ----- chuột -----
     def mousePressEvent(self, event) -> None:

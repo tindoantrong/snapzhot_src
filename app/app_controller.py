@@ -435,7 +435,6 @@ class _UpdateDialog(QDialog):
 class AppController(QObject):
     # Tín hiệu nội bộ để gọi chụp/quay từ luồng hotkey về luồng GUI an toàn.
     request_region = Signal()
-    request_video_toggle = Signal()
     request_escape = Signal()
 
     def __init__(self) -> None:
@@ -492,6 +491,13 @@ class AppController(QObject):
         self.region_selector = RegionSelector()
         self.region_selector.region_selected.connect(self._on_region_selected)
         self.region_selector.image_captured.connect(self._handle_new_capture)
+        # Overlay đóng (chọn xong / hủy) → trả Esc toàn cục về đúng trạng thái.
+        self.region_selector.region_selected.connect(self._on_region_overlay_closed)
+        self.region_selector.image_captured.connect(self._on_region_overlay_closed)
+        self.region_selector.cancelled.connect(self._on_region_overlay_closed)
+        # Đang chờ cửa sổ app ẩn hẳn trước khi đóng băng màn hình.
+        self._region_pending = False
+        self._region_closed_at = 0.0  # mốc overlay đóng (chống Esc nhân đôi)
 
         # Chụp theo cửa sổ (Windows + pywin32). Dùng chung luồng với chụp vùng.
         self.window_selector = WindowSelector()
@@ -544,7 +550,6 @@ class AppController(QObject):
 
         # Kết nối hàng đợi để chụp/quay được kích hoạt từ luồng khác (hotkey).
         self.request_region.connect(self.capture_region, Qt.QueuedConnection)
-        self.request_video_toggle.connect(self.toggle_video_recording, Qt.QueuedConnection)
         self.request_escape.connect(self._on_escape, Qt.QueuedConnection)
 
         # Tự kiểm tra cập nhật: lần đầu 30s sau khởi động, sau đó mỗi 30 phút.
@@ -768,10 +773,19 @@ class AppController(QObject):
     def capture_region(self) -> None:
         if self._hotkey_dialog_open:
             return  # Bỏ qua: dialog phím tắt đang mở, tránh kẹt screenshot mode
-        # Ẩn cửa sổ app trước nếu đang hiện, chờ 150ms để OS vẽ lại.
+        # Lib keyboard bắn callback trên MỌI KEY_DOWN, kể cả auto-repeat của OS:
+        # giữ PrtSc hơi lâu = gọi lại liên tục khi overlay đang hiện → ảnh đóng băng
+        # mới chụp dính CHÍNH overlay (mờ chồng mờ) và vùng đang kéo bị reset →
+        # màn hình tối mờ dần, không chụp được. Đang chọn vùng thì bỏ qua.
+        if self._region_pending or self.region_selector.isVisible():
+            return
+        # Ẩn cửa sổ app trước nếu đang hiện, chờ OS vẽ lại xong (kể cả hiệu ứng
+        # mờ dần khi ẩn cửa sổ ~200ms của Windows — 150ms trước đây hay chụp dính
+        # bóng mờ của Editor).
         if self.library_window.isVisible() or self.editor.isVisible():
             self._hide_app_windows()
-            QTimer.singleShot(150, self._start_frozen_region)
+            self._region_pending = True
+            QTimer.singleShot(300, self._start_frozen_region)
         else:
             self._start_frozen_region()
 
@@ -781,8 +795,27 @@ class AppController(QObject):
         Giải quyết bug: menu xổ ra (dropdown) trên web bị đóng khi overlay lấy focus.
         Ảnh được chụp TRƯỚC KHI overlay hiện → trạng thái màn hình được giữ nguyên.
         """
-        frozen = capture_manager.capture_fullscreen()
+        self._region_pending = False
+        if self.region_selector.isVisible():
+            return  # overlay đã hiện: không chụp lại (sẽ dính chính overlay)
+        try:
+            frozen = capture_manager.capture_fullscreen()
+        except Exception:
+            # mss lỗi (màn hình khoá / UAC / đổi màn hình) → chọn vùng trên màn
+            # hình thật thay vì im lặng không làm gì.
+            _log.warning("[capture] không đóng băng được màn hình", exc_info=True)
+            frozen = None
         self.region_selector.start(frozen_bg=frozen)
+        # Esc toàn cục: overlay không phải lúc nào cũng giành được focus (Windows
+        # chặn cướp foreground khi gọi từ hotkey) → Esc của overlay chết câm,
+        # người dùng kẹt ở màn hình tối.
+        self._register_escape()
+
+    def _on_region_overlay_closed(self, *_args) -> None:
+        """Overlay chọn vùng đã đóng → gỡ Esc toàn cục nếu không còn ai dùng."""
+        self._region_closed_at = time.monotonic()
+        if not (self._delay_timer.isActive() or self._recording):
+            self._unregister_escape()
 
     @Slot()
     def capture_fullscreen(self) -> None:
@@ -926,7 +959,13 @@ class AppController(QObject):
 
     @Slot()
     def _on_escape(self) -> None:
-        if self._delay_timer.isActive():
+        if self.region_selector.isVisible():
+            self.region_selector.cancel()
+        elif time.monotonic() - self._region_closed_at < 0.5:
+            # Cùng phím Esc vừa hủy overlay (qua keyPressEvent) → đừng dừng
+            # luôn video đang quay.
+            return
+        elif self._delay_timer.isActive():
             self._cancel_countdown()
         elif self._recording:
             self.stop_recording()
@@ -1385,14 +1424,8 @@ class AppController(QObject):
                 except Exception:
                     self._remove_region_hook = None
 
-        try:
-            keyboard.add_hotkey(
-                self.config.get("hotkey_video", "ctrl+shift+r"),
-                lambda: self._emit_safe(self.request_video_toggle),
-            )
-        except Exception:
-            # Một số máy cần quyền admin để hook bàn phím toàn cục.
-            pass
+        # Quay video không còn phím tắt toàn cục (bỏ Ctrl+Shift+R) — chỉ bật qua
+        # menu khay / nút trong Editor & Thư viện.
         self._start_hotkey_watchdog()
 
     def reload_global_hotkeys(self) -> None:
@@ -1420,7 +1453,8 @@ class AppController(QObject):
         self._esc_handle = None
         self.install_global_hotkeys()
         # Đăng ký lại Esc nếu đang đếm ngược / đang quay (nếu không, hủy/dừng chết câm).
-        if self._delay_timer.isActive() or self._recording:
+        if (self._delay_timer.isActive() or self._recording
+                or self.region_selector.isVisible()):
             self._register_escape()
 
     def _start_hotkey_watchdog(self) -> None:

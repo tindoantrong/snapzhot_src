@@ -25,7 +25,6 @@ App chạy ở **khay hệ thống** (system tray, icon chấm đỏ). Lần đ�
 |------|-----------|
 | `Print Screen` | Chụp vùng chọn *(mặc định; có thể tuỳ chỉnh — xem bên dưới)* |
 | `Ctrl+Shift+F` | Chụp toàn màn hình |
-| `Ctrl+Shift+R` | Bật/tắt quay video toàn màn hình |
 | `Ctrl+Z` / `Ctrl+Y` | Hoàn tác / Làm lại (trong Editor) |
 | `Esc` | Hủy đếm ngược / Dừng quay (khi đang đếm ngược hoặc quay video) |
 
@@ -55,7 +54,7 @@ App chạy ở **khay hệ thống** (system tray, icon chấm đỏ). Lần đ�
 - **Hoàn tác/Làm lại**: nút ↶ ↷ trên toolbar hoặc `Ctrl+Z` / `Ctrl+Y` — áp dụng cho mọi thao tác kể cả blur, crop, di chuyển, xoá.
 - **Chọn/di chuyển/xoá**: công cụ "Chọn" (↖), nhấn `Delete` để xoá đối tượng đang chọn.
 - **Lưu vào thư viện / Xuất ra file / Copy** ở thanh dưới Editor.
-- **Quay video**: `Ctrl+Shift+R` (hoặc menu khay → "Quay video toàn màn hình") → thanh điều khiển nổi hiện ra với **Tạm dừng / Dừng** và đồng hồ. Dừng xong (hoặc nhấn `Esc`) video tự lưu vào thư viện. *(Luôn quay toàn màn hình — không chọn vùng.)*
+- **Quay video**: menu khay → "Quay video toàn màn hình" (hoặc nút quay trong Editor / Thư viện) → thanh điều khiển nổi hiện ra với **Tạm dừng / Dừng** và đồng hồ. Dừng xong (hoặc nhấn `Esc`) video tự lưu vào thư viện. *(Luôn quay toàn màn hình — không chọn vùng.)*
 - **Quay kèm âm thanh micro**: bật mục **"Quay kèm âm thanh micro"** ở menu khay (checkable). Khi quay, mic được thu song song rồi ghép (mux) vào MP4. Thiếu thiết bị/thư viện thu âm thì tự động quay không tiếng (video vẫn hợp lệ).
 - **Thư viện**: ảnh → double-click mở trong Editor; video (có badge ▶) → double-click mở bằng **trình phát nhúng** (Play/Pause, thanh tua, thời gian, âm lượng). Sửa tag, xoá như nhau.
 - **Khởi động cùng Windows**: menu khay → bật/tắt **"Khởi động cùng Windows"** — ghi vào registry HKCU\…\Run, không cần quyền admin.

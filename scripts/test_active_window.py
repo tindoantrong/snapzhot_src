@@ -239,8 +239,9 @@ print("OK: không đăng ký phím tắt cho chụp app (chỉ dùng nút)")
 
 # Các phím tắt CŨ phải còn nguyên — gỡ phím mới không được đụng chúng.
 assert "print screen" in _keys, f"phải giữ hotkey chụp vùng: {_keys}"
-assert "ctrl+shift+r" in _keys, f"phải giữ hotkey quay video: {_keys}"
-print("OK: hotkey chụp vùng (PrtSc) + quay video (Ctrl+Shift+R) vẫn còn")
+# Quay video đã bỏ phím tắt toàn cục (Ctrl+Shift+R) từ v0.1.40.
+assert "ctrl+shift+r" not in _keys, f"không còn hotkey quay video: {_keys}"
+print("OK: hotkey chụp vùng (PrtSc) còn nguyên, không còn Ctrl+Shift+R")
 
 # ---------- Phần 4: nút "Chụp app đang dùng" trên toolbar Editor ----------
 from PySide6.QtGui import QAction as _QAction
