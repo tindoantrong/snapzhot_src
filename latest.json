@@ -1,5 +1,5 @@
 {
-  "version": "0.1.39",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.39.exe",
-  "notes": "Thêm nút \"Chụp app đang dùng\" trên thanh công cụ Editor (cạnh nút Quay video): bấm một phát là chụp ngay cửa sổ app đang làm việc — tiện khi cần ảnh màn hình để báo bug, không phải rê chuột chọn cửa sổ nữa. Ảnh cắt sát khung app theo DWM nên không dính viền mờ hay bóng đổ của Windows, đúng ở mọi mức phóng to màn hình (125%/150%) và trên nhiều màn hình. Chức năng này cũng có trong menu khay hệ thống ở mục \"Chụp cửa sổ vừa dùng\"."
+  "version": "0.1.40",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.40.exe",
+  "notes": "v0.1.40: Sửa lỗi chụp vùng đôi khi làm màn hình tối mờ mà không chụp được (giữ phím chụp, đa màn hình, Esc không thoát được). Bỏ phím tắt Ctrl+Shift+R quay video — quay video qua menu khay hoặc nút trong app."
 }
