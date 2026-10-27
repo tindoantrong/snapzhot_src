@@ -1,5 +1,5 @@
 {
-  "version": "0.1.41",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.41.exe",
-  "notes": "v0.1.41: Thanh tải bản cập nhật ở màn hình Thư viện/Editor hiện rõ phần trăm (%) và số MB, hiện 0% ngay khi bấm tải để không tưởng app bị treo."
+  "version": "0.1.42",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.42.exe",
+  "notes": "v0.1.42: Thư viện có menu chuột phải \"Mở thư mục chứa file\" (mở Windows Explorer tại file ảnh/video). Nút \"Cập nhật ngay\" trên thanh báo bản mới giờ mở hộp thoại Kiểm tra cập nhật (hiện % khi tải) thay vì tải trực tiếp."
 }
