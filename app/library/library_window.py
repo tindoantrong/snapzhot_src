@@ -396,8 +396,13 @@ class LibraryWindow(QMainWindow):
             item.setSelected(True)
         self.list.setCurrentItem(item)
         menu = QMenu(self)
+        cap = self.library.get(item.data(Qt.UserRole))
+        if cap is not None and not cap.is_video:
+            copy_act = menu.addAction("Copy ảnh vào clipboard", self._copy_selected_image)
+            copy_act.setShortcut("Ctrl+C")  # chỉ để hiện gợi ý phím; phím do keyPressEvent xử lý
         menu.addAction("Mở thư mục chứa file", self._reveal_selected_in_explorer)
         menu.exec(self.list.viewport().mapToGlobal(pos))
+        menu.deleteLater()  # mỗi lần chuột phải tạo menu mới → dọn, tránh tích tụ
 
     def _reveal_selected_in_explorer(self) -> None:
         """Mở Windows Explorer tại thư mục chứa file, bôi chọn sẵn file đó."""
