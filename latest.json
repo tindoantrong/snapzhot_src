@@ -1,5 +1,5 @@
 {
-  "version": "0.1.40",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.40.exe",
-  "notes": "v0.1.40: Sửa lỗi chụp vùng đôi khi làm màn hình tối mờ mà không chụp được (giữ phím chụp, đa màn hình, Esc không thoát được). Bỏ phím tắt Ctrl+Shift+R quay video — quay video qua menu khay hoặc nút trong app."
+  "version": "0.1.41",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.41.exe",
+  "notes": "v0.1.41: Thanh tải bản cập nhật ở màn hình Thư viện/Editor hiện rõ phần trăm (%) và số MB, hiện 0% ngay khi bấm tải để không tưởng app bị treo."
 }
