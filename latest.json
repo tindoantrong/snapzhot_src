@@ -1,5 +1,5 @@
 {
-  "version": "0.1.42",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.42.exe",
-  "notes": "v0.1.42: Thư viện có menu chuột phải \"Mở thư mục chứa file\" (mở Windows Explorer tại file ảnh/video). Nút \"Cập nhật ngay\" trên thanh báo bản mới giờ mở hộp thoại Kiểm tra cập nhật (hiện % khi tải) thay vì tải trực tiếp."
+  "version": "0.1.43",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.43.exe",
+  "notes": "v0.1.43: Thư viện có thêm mục chuột phải \"Copy ảnh vào clipboard\" trên ảnh (dán thẳng vào Zalo, Teams, Word…)."
 }
