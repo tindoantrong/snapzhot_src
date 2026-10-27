@@ -59,13 +59,13 @@ _BANNER_QSS = """
 #updateBanner QProgressBar {
     background: #1E1F22;
     border: 1px solid #3A3D42;
-    border-radius: 3px;
+    border-radius: 4px;
     text-align: center;
-    color: #C8C8C8;
-    font-size: 10px;
-    max-height: 14px;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: bold;
 }
-#updateBanner QProgressBar::chunk { background: #1E90FF; border-radius: 2px; }
+#updateBanner QProgressBar::chunk { background: #1E90FF; border-radius: 3px; }
 """
 
 
@@ -115,7 +115,10 @@ class UpdateBanner(QWidget):
         layout.addWidget(self._msg, 1)
 
         self._progress = QProgressBar()
-        self._progress.setFixedWidth(160)
+        # Giống thanh tải ở hộp thoại "Kiểm tra cập nhật": rộng, có % ở giữa.
+        self._progress.setFixedHeight(18)
+        self._progress.setMinimumWidth(260)
+        self._progress.setFormat("%p%")
         self._progress.hide()
         layout.addWidget(self._progress)
 
@@ -168,8 +171,12 @@ class UpdateBanner(QWidget):
         self._action_btn.setEnabled(False)
         self._action_btn.setText("Đang tải…")
         self._dismiss_btn.hide()
-        self._progress.setRange(0, 0)
+        # Hiện 0% ngay (không để thanh "chạy qua lại" vô định) — kết nối tới
+        # GitHub + redirect CDN có thể mất vài giây, trông như treo.
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
         self._progress.show()
+        self._msg.setText("Đang kết nối máy chủ tải cập nhật…")
 
         thread = QThread(self)
         worker = _BannerDownloadWorker(self._download_url)
@@ -189,20 +196,23 @@ class UpdateBanner(QWidget):
 
     @Slot(int, int)
     def _on_progress(self, downloaded: int, total: int) -> None:
+        mb = downloaded / (1024 * 1024)
         if total > 0:
-            self._progress.setRange(0, total)
-            self._progress.setValue(downloaded)
-            mb = downloaded / (1024 * 1024)
+            pct = min(100, downloaded * 100 // total)
+            self._progress.setRange(0, 100)
+            self._progress.setValue(pct)
             mb_t = total / (1024 * 1024)
-            self._msg.setText(f"Đang tải cập nhật… {mb:.1f}/{mb_t:.1f} MB")
+            self._msg.setText(f"Đang tải cập nhật… {pct}% ({mb:.1f}/{mb_t:.1f} MB)")
         else:
+            # Server không trả Content-Length → không tính được %, vẫn báo số MB.
             self._progress.setRange(0, 0)
+            self._msg.setText(f"Đang tải cập nhật… {mb:.1f} MB")
 
     @Slot(str)
     def _on_finished(self, path: str) -> None:
         self._downloaded_path = path
-        self._progress.setRange(0, 1)
-        self._progress.setValue(1)
+        self._progress.setRange(0, 100)
+        self._progress.setValue(100)
         self._msg.setText("Tải xong! Đang mở trình cài đặt…")
         self._action_btn.setText("Cài đặt")
         self._action_btn.setEnabled(True)

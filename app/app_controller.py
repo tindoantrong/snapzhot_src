@@ -235,6 +235,7 @@ class _UpdateDialog(QDialog):
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setFixedHeight(18)
+        self.progress_bar.setFormat("%p%")
         self.progress_bar.hide()
         layout.addWidget(self.progress_bar)
 
@@ -280,9 +281,10 @@ class _UpdateDialog(QDialog):
         if self._dl_thread is not None:
             return
         self._mode = "downloading"
-        self.status.setText("Đang tải bản cập nhật…")
+        self.status.setText("Đang kết nối máy chủ tải cập nhật…")
+        # Hiện 0% ngay thay vì thanh vô định — trông như treo lúc chờ kết nối.
+        self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setRange(0, 0)  # indeterminate cho tới khi biết total
         self.progress_bar.show()
         self.auto_install_cb.show()
         self.action_btn.setEnabled(False)
@@ -309,11 +311,12 @@ class _UpdateDialog(QDialog):
     @Slot(int, int)
     def _on_dl_progress(self, downloaded: int, total: int) -> None:
         if total > 0:
-            self.progress_bar.setRange(0, total)
-            self.progress_bar.setValue(downloaded)
+            pct = min(100, downloaded * 100 // total)
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(pct)
             mb_dl = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
-            self.status.setText(f"Đang tải… {mb_dl:.1f} / {mb_total:.1f} MB")
+            self.status.setText(f"Đang tải… {pct}% ({mb_dl:.1f} / {mb_total:.1f} MB)")
         else:
             self.progress_bar.setRange(0, 0)
             mb_dl = downloaded / (1024 * 1024)
@@ -323,8 +326,8 @@ class _UpdateDialog(QDialog):
     def _on_dl_finished(self, path: str) -> None:
         self._downloaded_path = path
         self._mode = "downloaded"
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(100)
         self.close_btn.setEnabled(True)
         self.close_btn.setText("Để sau")
         if self.auto_install_cb.isChecked():
