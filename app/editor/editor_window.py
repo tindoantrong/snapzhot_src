@@ -497,6 +497,16 @@ class EditorWindow(QMainWindow):
             act.triggered.connect(signal.emit)
             tb.addAction(act)
 
+        # Nút Copy ở hàng trên cùng, ngay sau cụm chụp/quay: luôn thấy, không bị
+        # đẩy vào overflow ">>" của hàng công cụ vẽ khi cửa sổ hẹp.
+        tb.addSeparator()
+        copy_act = QAction("Copy", self)
+        copy_act.setIcon(tool_icon("copy"))
+        copy_act.setShortcuts([QKeySequence("Ctrl+C"), QKeySequence("Ctrl+Shift+C")])
+        copy_act.setToolTip("Copy ảnh vào clipboard (Ctrl+C)")
+        copy_act.triggered.connect(self._copy_clipboard)
+        tb.addAction(copy_act)
+
         # Đẩy nút Nền về sát mép phải: nó điều khiển CÁCH XEM (nền sáng/tối),
         # không phải một tác vụ chụp — tách hẳn khỏi cụm bên trái. Ở hàng trên
         # cùng nên luôn thấy, thay vì rơi vào overflow ">>" của thanh Zoom khi
@@ -574,22 +584,6 @@ class EditorWindow(QMainWindow):
             tb.addAction(act)
             self._tool_actions[tool] = act
 
-        # Spacer co giãn đẩy Copy sang góc phải-trên toolbar.
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        tb.addWidget(spacer)
-
-        # Nút Copy nổi bật góc phải-trên (icon lớn hơn, hiện cả chữ).
-        copy_act = QAction("Copy", self)
-        copy_act.setIcon(tool_icon("copy"))
-        copy_act.setShortcuts([QKeySequence("Ctrl+C"), QKeySequence("Ctrl+Shift+C")])
-        copy_act.setToolTip("Copy ảnh vào clipboard (Ctrl+C)")
-        copy_act.triggered.connect(self._copy_clipboard)
-        tb.addAction(copy_act)
-        copy_btn = tb.widgetForAction(copy_act)
-        if copy_btn is not None:
-            copy_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-            copy_btn.setIconSize(QSize(30, 30))
 
     # ---------- thanh zoom ----------
     def _build_zoom_toolbar(self) -> None:
