@@ -1,5 +1,5 @@
 {
-  "version": "0.1.43",
-  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.43.exe",
-  "notes": "v0.1.43: Thư viện có thêm mục chuột phải \"Copy ảnh vào clipboard\" trên ảnh (dán thẳng vào Zalo, Teams, Word…)."
+  "version": "0.1.44",
+  "url": "https://github.com/tindoantrong/snapzhot_src/releases/latest/download/SnagTin-Setup-0.1.44.exe",
+  "notes": "v0.1.44: Editor dời nút Copy lên hàng trên cùng, ngay cạnh các nút Chụp/Quay video — luôn thấy, không bị khuất khi cửa sổ hẹp."
 }
