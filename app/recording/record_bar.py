@@ -5,7 +5,7 @@ Phát signal pause_toggled(bool) và stopped() cho controller xử lý.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
@@ -22,6 +22,7 @@ class RecordBar(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self._elapsed = 0
         self._paused = False
+        self._avoid: QRect | None = None  # vùng đang quay — đặt thanh ra ngoài
 
         self._timer = QTimer(self)
         self._timer.setInterval(1000)
@@ -58,7 +59,9 @@ class RecordBar(QWidget):
             "QPushButton:hover { background:#555; }"
         )
 
-    def start(self) -> None:
+    def start(self, avoid: QRect | None = None) -> None:
+        """avoid: vùng đang quay (toạ độ Qt) — đặt thanh ra ngoài để không lọt vào video."""
+        self._avoid = avoid
         self._elapsed = 0
         self._paused = False
         self._pause_btn.setText("⏸ Tạm dừng")
@@ -75,8 +78,26 @@ class RecordBar(QWidget):
         self.hide()
 
     def _reposition(self) -> None:
-        screen = QGuiApplication.primaryScreen().geometry()
         self.adjustSize()
+        avoid = self._avoid
+        if avoid is not None:
+            screen_obj = QGuiApplication.screenAt(avoid.center())
+            screen = (screen_obj or QGuiApplication.primaryScreen()).geometry()
+            x = avoid.center().x() - self.width() // 2
+            x = max(screen.left() + 4, min(x, screen.right() - self.width() - 4))
+            gap = 10
+            below = avoid.bottom() + gap
+            above = avoid.top() - gap - self.height()
+            if below + self.height() <= screen.bottom():
+                self.move(x, below)
+                return
+            if above >= screen.top():
+                self.move(x, above)
+                return
+            # Vùng quay gần như cả màn hình → đành đặt trong vùng (góc dưới).
+            self.move(x, avoid.bottom() - self.height() - gap)
+            return
+        screen = QGuiApplication.primaryScreen().geometry()
         x = screen.left() + (screen.width() - self.width()) // 2
         self.move(x, screen.top() + 12)
 

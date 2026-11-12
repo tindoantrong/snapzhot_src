@@ -12,6 +12,7 @@
 ### 🎥 Quay video màn hình
 - Quay **vùng chọn** hoặc **toàn màn hình**, xuất file **MP4 (H.264)**
 - Tùy chọn **quay kèm âm thanh micro**
+- Video **thấy con trỏ chuột**, click hiện **vòng sáng** (trái vàng / phải xanh)
 - Thanh điều khiển nổi: Tạm dừng / Dừng / đồng hồ đếm giờ
 
 ### ✏️ Trình chỉnh sửa ảnh

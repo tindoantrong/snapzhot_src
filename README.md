@@ -7,7 +7,7 @@ Bản clone tối giản của Snagit, viết bằng **Python + PySide6 (Qt)**, 
 1. **Capture** — chụp **vùng chọn**, **toàn màn hình** (đa màn hình), **chụp cửa sổ** (highlight cửa sổ dưới con trỏ, hoặc chụp ngay app đang dùng bằng một nút), và **chụp hẹn giờ** (đếm ngược 3s/5s).
 2. **Library** — thư viện ảnh **và video** đã chụp, lưu trong SQLite, tìm kiếm & gắn tag; **trình phát video nhúng** ngay trong app.
 3. **Editor** — canvas vẽ chú thích: mũi tên, chữ nhật, elip, bút vẽ, chữ, đánh dấu (highlight), làm mờ (blur), **đánh số bước (step)**, **cắt ảnh (crop)**, **stamp (chèn biểu tượng — 6 glyph)**, **tiêu điểm (spotlight — làm tối ngoài vùng chọn)**; panel phải có **Express Styles (6 preset)**, **Độ trong (Opacity)**, **Đổ bóng (Shadow)**, **Tô nền (Fill)** cho chữ nhật/elip; có **Zoom** (in/out/fit/100% + Ctrl+lăn chuột) và **Hoàn tác/Làm lại (Undo/Redo)** nhiều bước.
-4. **Recording** — **quay video toàn màn hình** xuất MP4 (H.264), tùy chọn **quay kèm âm thanh micro**.
+4. **Recording** — **quay video một vùng hoặc toàn màn hình** xuất MP4 (H.264), **thấy con trỏ chuột + vòng sáng khi click**, tùy chọn **quay kèm âm thanh micro**.
 
 ## Cài đặt & chạy (chế độ phát triển)
 
@@ -54,7 +54,7 @@ App chạy ở **khay hệ thống** (system tray, icon chấm đỏ). Lần đ�
 - **Hoàn tác/Làm lại**: nút ↶ ↷ trên toolbar hoặc `Ctrl+Z` / `Ctrl+Y` — áp dụng cho mọi thao tác kể cả blur, crop, di chuyển, xoá.
 - **Chọn/di chuyển/xoá**: công cụ "Chọn" (↖), nhấn `Delete` để xoá đối tượng đang chọn.
 - **Lưu vào thư viện / Xuất ra file / Copy** ở thanh dưới Editor.
-- **Quay video**: menu khay → "Quay video toàn màn hình" (hoặc nút quay trong Editor / Thư viện) → thanh điều khiển nổi hiện ra với **Tạm dừng / Dừng** và đồng hồ. Dừng xong (hoặc nhấn `Esc`) video tự lưu vào thư viện. *(Luôn quay toàn màn hình — không chọn vùng.)*
+- **Quay video**: menu khay → "Quay video" (hoặc nút quay trong Editor / Thư viện) → **kéo chọn vùng cần quay** (hoặc nhấn `Enter` để quay toàn màn hình, `Esc` để hủy) → vùng quay có viền đỏ, thanh điều khiển nổi **Tạm dừng / Dừng** + đồng hồ nằm ngoài vùng. Video có con trỏ chuột, click trái hiện vòng vàng, click phải vòng xanh. Dừng xong (hoặc nhấn `Esc`) video tự lưu vào thư viện.
 - **Quay kèm âm thanh micro**: bật mục **"Quay kèm âm thanh micro"** ở menu khay (checkable). Khi quay, mic được thu song song rồi ghép (mux) vào MP4. Thiếu thiết bị/thư viện thu âm thì tự động quay không tiếng (video vẫn hợp lệ).
 - **Thư viện**: ảnh → double-click mở trong Editor; video (có badge ▶) → double-click mở bằng **trình phát nhúng** (Play/Pause, thanh tua, thời gian, âm lượng). Sửa tag, xoá như nhau.
 - **Khởi động cùng Windows**: menu khay → bật/tắt **"Khởi động cùng Windows"** — ghi vào registry HKCU\…\Run, không cần quyền admin.

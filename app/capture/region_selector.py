@@ -8,11 +8,14 @@ Chế độ đóng băng (frozen_bg): nếu start() nhận một QImage chụp t
 overlay hiển thị ảnh đó thay vì nền trong suốt. Khi chọn xong, cắt vùng từ ảnh
 đóng băng và phát image_captured(QImage) — không chụp lại màn hình thật.
 Giải quyết bug: menu xổ ra trên web bị đóng khi overlay lấy focus.
+
+Chế độ chọn vùng QUAY (``allow_full=True``): hiện dòng hướng dẫn ``hint``,
+Enter → phát full_screen_requested() để quay toàn màn hình.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 
@@ -20,9 +23,12 @@ class RegionSelector(QWidget):
     region_selected = Signal(QRect)   # QRect theo toạ độ màn hình ảo (chế độ thường)
     image_captured = Signal(QImage)   # ảnh đã cắt (chế độ đóng băng)
     cancelled = Signal()
+    full_screen_requested = Signal()  # Enter (chỉ khi allow_full)
 
-    def __init__(self) -> None:
+    def __init__(self, hint: str = "", allow_full: bool = False) -> None:
         super().__init__()
+        self._hint = hint
+        self._allow_full = allow_full
         self.setWindowFlags(
             Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
@@ -139,6 +145,11 @@ class RegionSelector(QWidget):
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Escape:
             self._finish_cancel()
+        elif self._allow_full and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self._frozen_image = None
+            self._frozen_pixmap = None
+            self.hide()
+            self.full_screen_requested.emit()
 
     def _finish_cancel(self) -> None:
         self._frozen_image = None
@@ -162,6 +173,7 @@ class RegionSelector(QWidget):
             painter.drawPixmap(self.rect(), self._frozen_pixmap)
             if sel.isNull():
                 painter.fillRect(self.rect(), overlay_color)
+                self._paint_hint(painter)
                 return
             # Phủ tối 4 dải xung quanh vùng chọn, giữ vùng chọn sáng rõ.
             w, h = self.width(), self.height()
@@ -173,6 +185,7 @@ class RegionSelector(QWidget):
             # Chế độ thường: overlay trong suốt, khoét vùng chọn.
             if sel.isNull():
                 painter.fillRect(self.rect(), overlay_color)
+                self._paint_hint(painter)
                 return
             painter.fillRect(self.rect(), overlay_color)
             painter.setCompositionMode(QPainter.CompositionMode_Clear)
@@ -189,3 +202,23 @@ class RegionSelector(QWidget):
         painter.setPen(QColor("#1E90FF"))
         ty = sel.top() - 8 if sel.top() > 20 else sel.bottom() + 18
         painter.drawText(sel.left(), ty, label)
+
+    def _paint_hint(self, painter: QPainter) -> None:
+        """Hộp hướng dẫn giữa-trên màn hình chính (chỉ khi chưa kéo chọn)."""
+        if not self._hint:
+            return
+        primary = QGuiApplication.primaryScreen().geometry()
+        primary.translate(-self._virtual_origin)
+        font = QFont(painter.font())
+        font.setPointSize(12)
+        font.setBold(True)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        w = fm.horizontalAdvance(self._hint) + 36
+        h = fm.height() + 20
+        box = QRect(primary.center().x() - w // 2, primary.top() + 40, w, h)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(20, 20, 20, 220))
+        painter.drawRoundedRect(box, 8, 8)
+        painter.setPen(QColor("white"))
+        painter.drawText(box, Qt.AlignCenter, self._hint)

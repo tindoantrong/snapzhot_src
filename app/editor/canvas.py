@@ -903,6 +903,53 @@ class Canvas(QGraphicsView):
         self.step_number_changed.emit(self.state.step_number)
         self._emit_zoom()
 
+    # ---------- giữ chú thích khi chuyển ảnh ----------
+    def take_session(self) -> dict | None:
+        """Gỡ ảnh nền hiện tại + mọi chú thích ra khỏi scene để cất lại.
+
+        Gọi TRƯỚC khi load ảnh khác (load_image xoá sạch scene). Trả None nếu
+        chưa vẽ gì (không có chú thích, chưa làm mờ/cắt) → mở lại đọc từ đĩa.
+        Item được removeItem (không bị huỷ) nên vẫn chọn/sửa/di chuyển được
+        khi khôi phục. Lịch sử hoàn tác không giữ (command trỏ vào scene cũ).
+        """
+        if self._bg_item is None:
+            return None
+        fi = self._scene.focusItem()
+        if fi is not None:
+            fi.clearFocus()  # chốt chữ đang gõ (chữ rỗng tự bị xoá)
+        self._scene.clearSelection()
+        if self._temp_item is not None and self._temp_item.scene() is self._scene:
+            self._scene.removeItem(self._temp_item)
+        self._temp_item = None
+        self._start = None
+        self._move_origins = {}
+        items = [
+            it for it in self._scene.items()
+            if it.parentItem() is None and it is not self._bg_item
+            and not isinstance(it, ResizeHandle)
+        ]
+        if not items and self.undo_stack.index() == 0:
+            return None
+        items.sort(key=lambda it: it.zValue())
+        for it in items:
+            self._scene.removeItem(it)
+        return {
+            "pixmap": QPixmap(self._bg_item.pixmap()),
+            "scene_rect": QRectF(self._scene.sceneRect()),
+            "items": items,
+            "step_number": self.state.step_number,
+        }
+
+    def restore_session(self, session: dict) -> None:
+        """Mở lại ảnh nền + chú thích đã cất bằng take_session()."""
+        self.load_image(session["pixmap"].toImage())
+        self._scene.setSceneRect(session["scene_rect"])
+        for it in session["items"]:
+            self._scene.addItem(it)
+        self.state.step_number = session["step_number"]
+        self.centerOn(self._scene.sceneRect().center())
+        self.step_number_changed.emit(self.state.step_number)
+
     def has_image(self) -> bool:
         return self._bg_item is not None
 

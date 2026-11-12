@@ -53,6 +53,7 @@ from .library.library_manager import LibraryManager
 from .library.library_window import LibraryWindow
 from .recording.audio_recorder import AudioRecorder, audio_available, mux_audio_video
 from .recording.record_bar import RecordBar
+from .recording.record_frame import RecordFrame
 from .recording.recorder import VideoRecorder
 
 import logging
@@ -523,6 +524,18 @@ class AppController(QObject):
         self.record_bar = RecordBar()
         self.record_bar.pause_toggled.connect(self._on_pause_toggled)
         self.record_bar.stopped.connect(self.stop_recording)
+        # Chọn vùng quay TRƯỚC khi quay (overlay sống, không đóng băng).
+        self.record_region_selector = RegionSelector(
+            hint="Kéo chọn vùng cần quay   ·   Enter: quay toàn màn hình   ·   Esc: hủy",
+            allow_full=True,
+        )
+        self.record_region_selector.region_selected.connect(self._on_record_region_selected)
+        self.record_region_selector.full_screen_requested.connect(self._on_record_full_screen)
+        self.record_region_selector.region_selected.connect(self._on_region_overlay_closed)
+        self.record_region_selector.full_screen_requested.connect(self._on_region_overlay_closed)
+        self.record_region_selector.cancelled.connect(self._on_region_overlay_closed)
+        self._record_frame = RecordFrame()
+        self._record_pending = False  # đang chờ ẩn cửa sổ app trước khi chọn vùng quay
         self._recorder: VideoRecorder | None = None
         self._recording = False
         self._recording_region: dict | None = None
@@ -594,7 +607,7 @@ class AppController(QObject):
             delay_menu.addAction(act)
         menu.addSeparator()
 
-        self._record_action = QAction("Quay video toàn màn hình", self)
+        self._record_action = QAction("Quay video", self)
         self._record_action.triggered.connect(self.toggle_video_recording)
         menu.addAction(self._record_action)
 
@@ -799,7 +812,7 @@ class AppController(QObject):
         # giữ PrtSc hơi lâu = gọi lại liên tục khi overlay đang hiện → ảnh đóng băng
         # mới chụp dính CHÍNH overlay (mờ chồng mờ) và vùng đang kéo bị reset →
         # màn hình tối mờ dần, không chụp được. Đang chọn vùng thì bỏ qua.
-        if self._region_pending or self.region_selector.isVisible():
+        if self._region_pending or self._any_selector_visible():
             return
         # Ẩn cửa sổ app trước nếu đang hiện, chờ OS vẽ lại xong (kể cả hiệu ứng
         # mờ dần khi ẩn cửa sổ ~200ms của Windows — 150ms trước đây hay chụp dính
@@ -832,6 +845,10 @@ class AppController(QObject):
         # chặn cướp foreground khi gọi từ hotkey) → Esc của overlay chết câm,
         # người dùng kẹt ở màn hình tối.
         self._register_escape()
+
+    def _any_selector_visible(self) -> bool:
+        return (self.region_selector.isVisible()
+                or self.record_region_selector.isVisible())
 
     def _on_region_overlay_closed(self, *_args) -> None:
         """Overlay chọn vùng đã đóng → gỡ Esc toàn cục nếu không còn ai dùng."""
@@ -983,6 +1000,8 @@ class AppController(QObject):
     def _on_escape(self) -> None:
         if self.region_selector.isVisible():
             self.region_selector.cancel()
+        elif self.record_region_selector.isVisible():
+            self.record_region_selector.cancel()
         elif time.monotonic() - self._region_closed_at < 0.5:
             # Cùng phím Esc vừa hủy overlay (qua keyPressEvent) → đừng dừng
             # luôn video đang quay.
@@ -1037,13 +1056,59 @@ class AppController(QObject):
     # ---------- quay video ----------
     @Slot()
     def toggle_video_recording(self) -> None:
-        """Bật/tắt quay toàn màn hình: đang quay thì dừng, chưa thì bắt đầu."""
+        """Đang quay thì dừng; chưa thì cho chọn vùng quay (Enter = toàn màn hình)."""
         if self._recording:
             self.stop_recording()
             return
+        if self._record_pending or self._any_selector_visible():
+            return
         self._hide_app_windows()
-        QTimer.singleShot(180, lambda: self._begin_recording(
-            capture_manager.virtual_screen_geometry()))
+        self._record_pending = True
+        QTimer.singleShot(300, self._start_record_region_select)
+
+    def _start_record_region_select(self) -> None:
+        self._record_pending = False
+        if self._recording or self._any_selector_visible():
+            return
+        self.record_region_selector.start()
+        self._register_escape()
+
+    @Slot()
+    def _on_record_full_screen(self) -> None:
+        self._begin_recording(capture_manager.virtual_screen_geometry())
+
+    @Slot(QRect)
+    def _on_record_region_selected(self, rect: QRect) -> None:
+        """rect: toạ độ Qt (pixel logic, vùng ảo) → vùng pixel vật lý cho mss."""
+        region = self._logical_to_physical_region(rect)
+        if region["width"] < 16 or region["height"] < 16:
+            self.tray.showMessage(APP_NAME, "Vùng quay quá nhỏ — hãy kéo vùng lớn hơn.")
+            return
+        # Overlay vừa ẩn → chờ Windows vẽ lại cho sạch rồi mới quay frame đầu.
+        QTimer.singleShot(120, lambda: self._begin_recording(region, frame_rect=rect))
+
+    @staticmethod
+    def _logical_to_physical_region(rect: QRect) -> dict:
+        """Đổi QRect logic của Qt sang {left, top, width, height} pixel vật lý.
+
+        Qt trên Windows giữ nguyên GỐC từng màn hình, chỉ nhân DPI phần lệch
+        so với gốc → native = gốc + (logic - gốc) * dpr. Kẹp vào vùng ảo của
+        mss để không chụp ra ngoài màn hình (mss lỗi).
+        """
+        screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
+        dpr = screen.devicePixelRatio()
+        o = screen.geometry().topLeft()
+        left = o.x() + round((rect.x() - o.x()) * dpr)
+        top = o.y() + round((rect.y() - o.y()) * dpr)
+        right = left + round(rect.width() * dpr)
+        bottom = top + round(rect.height() * dpr)
+        v = capture_manager.virtual_screen_geometry()
+        left, top = max(left, v["left"]), max(top, v["top"])
+        right = min(right, v["left"] + v["width"])
+        bottom = min(bottom, v["top"] + v["height"])
+        # Cạnh chẵn: H.264 bắt buộc, cạnh lẻ thì bộ ghi phải co giãn cả khung.
+        w, h = max(0, right - left), max(0, bottom - top)
+        return {"left": left, "top": top, "width": w - w % 2, "height": h - h % 2}
 
     @Slot(bool)
     def _on_audio_toggled(self, checked: bool) -> None:
@@ -1123,7 +1188,9 @@ class AppController(QObject):
         self.config["start_on_boot"] = checked
         save_config(self.config)
 
-    def _begin_recording(self, region: dict) -> None:
+    def _begin_recording(self, region: dict, frame_rect: QRect | None = None) -> None:
+        """region: pixel vật lý cho mss. frame_rect: vùng theo toạ độ Qt khi quay
+        một vùng (để vẽ khung đỏ + đặt thanh điều khiển ra ngoài), None = toàn màn."""
         if self._recording:
             return
         ts = datetime.now()
@@ -1160,7 +1227,9 @@ class AppController(QObject):
         self._recorder.error.connect(self._on_recording_error)
         self._recording = True
         self._record_action.setText("Dừng quay video")
-        self.record_bar.start()
+        self.record_bar.start(avoid=frame_rect)
+        if frame_rect is not None:
+            self._record_frame.show_around(frame_rect)
         self._register_escape()
 
         # Bắt đầu audio rồi video sát nhau nhất có thể để giảm lệch.
@@ -1181,6 +1250,7 @@ class AppController(QObject):
             self._recorder.set_paused(paused)
         if self._audio_recorder is not None:
             self._audio_recorder.set_paused(paused)
+        self._record_frame.set_paused(paused)
 
     @Slot()
     def stop_recording(self) -> None:
@@ -1188,6 +1258,7 @@ class AppController(QObject):
             return
         self._unregister_escape()
         self.record_bar.finish()
+        self._record_frame.hide()
         # Dừng audio (đồng bộ: đóng stream + file) trước, video kết thúc sau.
         if self._audio_recorder is not None:
             try:
@@ -1199,7 +1270,7 @@ class AppController(QObject):
     @Slot(str, float, int)
     def _on_recording_finished(self, path: str, duration: float, frames: int) -> None:
         self._recording = False
-        self._record_action.setText("Quay video toàn màn hình")
+        self._record_action.setText("Quay video")
         self._unregister_escape()
 
         # Nếu có thu âm: ghép audio+video; lỗi/không tiếng -> giữ video-only.
@@ -1283,9 +1354,10 @@ class AppController(QObject):
 
     def _on_recording_error(self, message: str) -> None:
         self._recording = False
-        self._record_action.setText("Quay video toàn màn hình")
+        self._record_action.setText("Quay video")
         self._unregister_escape()
         self.record_bar.finish()
+        self._record_frame.hide()
         if self._audio_recorder is not None:
             try:
                 self._audio_recorder.stop()
@@ -1476,7 +1548,7 @@ class AppController(QObject):
         self.install_global_hotkeys()
         # Đăng ký lại Esc nếu đang đếm ngược / đang quay (nếu không, hủy/dừng chết câm).
         if (self._delay_timer.isActive() or self._recording
-                or self.region_selector.isVisible()):
+                or self._any_selector_visible()):
             self._register_escape()
 
     def _start_hotkey_watchdog(self) -> None:

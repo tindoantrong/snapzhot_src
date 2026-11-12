@@ -428,6 +428,8 @@ class EditorWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} - Editor")
         self.resize(1100, 720)
         self._current_capture_id: int | None = None
+        # capture_id → chú thích đã cất (Canvas.take_session), giữ thứ tự cũ→mới.
+        self._sessions: dict[int, dict] = {}
 
         self.canvas = Canvas()
         # Nền canvas tối để ảnh nổi bật (API Qt công khai, không đụng canvas.py).
@@ -1673,8 +1675,24 @@ class EditorWindow(QMainWindow):
             self.load_image(image)
 
     # ---------- xử lý ----------
+    _MAX_SESSIONS = 20  # số ảnh giữ chú thích trong bộ nhớ khi chuyển qua lại
+
     def load_image(self, image: QImage, capture_id: int | None = None) -> None:
-        self.canvas.load_image(image)
+        # Cất chú thích của ảnh đang mở → quay lại ảnh đó vẫn còn nguyên
+        # (mũi tên, chữ… vẫn chọn/sửa được, không bị "nướng" vào ảnh).
+        old_id = self._current_capture_id
+        if old_id is not None:
+            session = self.canvas.take_session()
+            self._sessions.pop(old_id, None)
+            if session is not None:
+                self._sessions[old_id] = session
+                while len(self._sessions) > self._MAX_SESSIONS:
+                    self._sessions.pop(next(iter(self._sessions)))
+        session = self._sessions.pop(capture_id, None) if capture_id is not None else None
+        if session is not None:
+            self.canvas.restore_session(session)
+        else:
+            self.canvas.load_image(image)
         self._current_capture_id = capture_id
         self._update_image_size_status()
         self._refresh_empty_state()
